@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  lint-frontend:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [mini-app, admin]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+        working-directory: apps/${{ matrix.app }}
+      - run: npm run lint
+        working-directory: apps/${{ matrix.app }}
+
+  test-go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+      - run: go work sync
+      - run: cd packages/go-shared && go test ./...
+      - run: cd services/gateway && go test ./...
+      - run: cd services/user-service && go test ./...
+
+  lint-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruff
+      - run: ruff check bot/
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: [test-go]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - run: docker compose build gateway user-service catalog-service
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm audit --audit-level=high || true
+        working-directory: apps/mini-app

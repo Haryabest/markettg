@@ -1,0 +1,36 @@
+services:
+  gateway:
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+  user-service:
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+  catalog-service:
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+  order-service:
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+  payment-service:
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+  delivery-service:
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+  notification-service:
+    deploy:
+      resources:
+        limits:
+          memory: 128M

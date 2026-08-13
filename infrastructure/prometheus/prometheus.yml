@@ -1,0 +1,33 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: gateway
+    static_configs:
+      - targets: ["gateway:8080"]
+    metrics_path: /metrics
+
+  - job_name: user-service
+    static_configs:
+      - targets: ["user-service:8081"]
+
+  - job_name: catalog-service
+    static_configs:
+      - targets: ["catalog-service:8082"]
+
+  - job_name: order-service
+    static_configs:
+      - targets: ["order-service:8083"]
+
+  - job_name: payment-service
+    static_configs:
+      - targets: ["payment-service:8084"]
+
+  - job_name: delivery-service
+    static_configs:
+      - targets: ["delivery-service:8085"]
+
+  - job_name: notification-service
+    static_configs:
+      - targets: ["notification-service:8086"]

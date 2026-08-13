@@ -1,0 +1,18 @@
+:80 {
+    handle /api/* {
+        reverse_proxy gateway:8080
+    }
+
+    handle /media/* {
+        uri strip_prefix /media
+        reverse_proxy minio:9000
+    }
+
+    handle /admin/* {
+        reverse_proxy admin:3000
+    }
+
+    handle {
+        reverse_proxy mini-app:3000
+    }
+}

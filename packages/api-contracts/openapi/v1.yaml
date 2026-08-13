@@ -1,0 +1,43 @@
+openapi: 3.0.3
+info:
+  title: MarketTG API
+  version: 1.0.0
+paths:
+  /api/v1/catalog/products:
+    get:
+      summary: List products
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [STARS, PREMIUM, GIFT]
+      responses:
+        "200":
+          description: Product list
+  /api/v1/orders:
+    post:
+      summary: Create order from cart
+      security:
+        - TelegramAuth: []
+      responses:
+        "201":
+          description: Order created
+  /api/v1/payments:
+    post:
+      summary: Create payment
+      security:
+        - TelegramAuth: []
+      responses:
+        "201":
+          description: Payment created
+components:
+  securitySchemes:
+    TelegramAuth:
+      type: http
+      scheme: bearer
+      description: "tma {initData}"

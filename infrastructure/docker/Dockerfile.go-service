@@ -1,0 +1,28 @@
+# Build stage
+FROM golang:1.23-alpine AS builder
+
+RUN apk add --no-cache git ca-certificates
+
+WORKDIR /build
+
+# Copy workspace
+COPY go.work ./
+COPY packages/go-shared ./packages/go-shared
+COPY services/${SERVICE_NAME} ./services/${SERVICE_NAME}
+
+WORKDIR /build/services/${SERVICE_NAME}
+
+RUN go mod download
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/server ./cmd/server
+
+# Runtime stage
+FROM alpine:3.20
+
+RUN apk add --no-cache ca-certificates tzdata
+
+WORKDIR /app
+COPY --from=builder /app/server .
+
+EXPOSE 8080
+
+CMD ["./server"]

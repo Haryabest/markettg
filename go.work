@@ -1,0 +1,12 @@
+go 1.23
+
+use (
+	./packages/go-shared
+	./services/gateway
+	./services/user-service
+	./services/catalog-service
+	./services/order-service
+	./services/payment-service
+	./services/delivery-service
+	./services/notification-service
+)
