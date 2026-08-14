@@ -13,3 +13,6 @@ require (
 )
 
 replace github.com/markettg/markettg/packages/go-shared => ../../packages/go-shared
+
+// Reuse the already-cached compress 1.17.9 zip; minio would otherwise pull 1.17.11 (~37MB).
+replace github.com/klauspost/compress => github.com/klauspost/compress v1.17.9

@@ -2,14 +2,23 @@
 
 FROM golang:1.23-alpine AS builder
 ARG SERVICE_PATH
-RUN apk add --no-cache git ca-certificates
 WORKDIR /build
 COPY packages/go-shared ./packages/go-shared
 COPY ${SERVICE_PATH} ./${SERVICE_PATH}
 WORKDIR /build/${SERVICE_PATH}
 ENV GOWORK=off
-RUN go mod download
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/server ./cmd/server
+ENV GOPROXY=https://goproxy.io,https://goproxy.cn,https://proxy.golang.org,direct
+ENV GOSUMDB=off
+ENV GOTOOLCHAIN=local
+# -mod=mod lets the build fill go.mod/go.sum inside the image (Go 1.16+ defaults to readonly).
+# Cache mounts keep module zips across failed/retry builds (klauspost/compress is ~37MB).
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    set -e; i=0; \
+    until CGO_ENABLED=0 GOOS=linux go build -mod=mod -ldflags="-w -s" -o /app/server ./cmd/server; do \
+      i=$((i+1)); [ "$i" -ge 5 ] && exit 1; \
+      echo "go build retry $i"; sleep 15; \
+    done
 
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata wget
