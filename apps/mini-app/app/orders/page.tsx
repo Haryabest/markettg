@@ -1,9 +1,18 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import Link from "next/link";
+import { Badge } from "@astryxdesign/core/Badge";
+import { EmptyState } from "@astryxdesign/core/EmptyState";
+import { Heading } from "@astryxdesign/core/Heading";
+import { List, ListItem } from "@astryxdesign/core/List";
+import { Spinner } from "@astryxdesign/core/Spinner";
+import { Text } from "@astryxdesign/core/Text";
+import { VStack } from "@astryxdesign/core/VStack";
+import { Button } from "@astryxdesign/core/Button";
 import { api } from "@/lib/api";
-import { formatPrice } from "@/lib/utils";
+import { formatDate, formatPrice } from "@/lib/utils";
+import { AppIcon } from "@/components/icons";
+import { Package, ShoppingBag } from "lucide-react";
 
 const STATUS_LABELS: Record<string, string> = {
   CREATED: "Создан",
@@ -14,30 +23,67 @@ const STATUS_LABELS: Record<string, string> = {
   CANCELLED: "Отменён",
 };
 
+const STATUS_VARIANT: Record<string, "neutral" | "info" | "success" | "warning" | "error"> = {
+  CREATED: "neutral",
+  PAYMENT_PENDING: "warning",
+  PAID: "info",
+  DELIVERING: "info",
+  COMPLETED: "success",
+  CANCELLED: "error",
+};
+
 export default function OrdersPage() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["orders"],
     queryFn: () => api.getOrders(),
   });
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Заказы</h1>
-      {isLoading && <p>Загрузка...</p>}
-      <ul className="space-y-3">
-        {data?.orders?.map((o) => (
-          <li key={o.id}>
-            <Link href={`/orders/${o.id}`} className="block rounded-2xl bg-zinc-50 p-4">
-              <div className="flex justify-between">
-                <span className="font-medium">#{o.id.slice(0, 8)}</span>
-                <span className="text-sm text-zinc-500">{STATUS_LABELS[o.status] || o.status}</span>
-              </div>
-              <p className="mt-1 font-semibold">{formatPrice(o.total_kopecks)}</p>
-            </Link>
-          </li>
+    <VStack gap={4}>
+      <VStack gap={1}>
+        <Heading level={1}>Заказы</Heading>
+        <Text type="supporting" color="secondary" display="block">
+          История покупок Stars, Premium и подарков. Нажмите на заказ, чтобы увидеть состав и статус доставки.
+        </Text>
+      </VStack>
+      {isLoading && <Spinner label="Загрузка заказов" />}
+      {isError && (
+        <EmptyState
+          title="Не удалось загрузить заказы"
+          description="Нужен вход через Telegram Mini App."
+        />
+      )}
+      {!isLoading && !isError && !data?.orders?.length && (
+        <EmptyState
+          title="Заказов пока нет"
+          description="Оформите первый заказ в каталоге — Stars и Premium придут сразу после оплаты."
+          actions={
+            <Button
+              label="В каталог"
+              href="/catalog"
+              variant="primary"
+              icon={<AppIcon icon={ShoppingBag} />}
+            />
+          }
+        />
+      )}
+      <List hasDividers>
+        {data?.orders?.map((order) => (
+          <ListItem
+            key={order.id}
+            startContent={<AppIcon icon={Package} />}
+            label={`Заказ #${order.id.slice(0, 8)}`}
+            description={`${formatPrice(order.total_kopecks)}${order.discount_kopecks ? ` · скидка ${formatPrice(order.discount_kopecks)}` : ""} · ${formatDate(order.created_at)}${order.items?.length ? ` · ${order.items.length} позиций` : ""}`}
+            href={`/orders/${order.id}`}
+            endContent={
+              <Badge
+                variant={STATUS_VARIANT[order.status] || "neutral"}
+                label={STATUS_LABELS[order.status] || order.status}
+              />
+            }
+          />
         ))}
-      </ul>
-      {!isLoading && !data?.orders?.length && <p className="text-center text-zinc-500">Заказов пока нет</p>}
-    </div>
+      </List>
+    </VStack>
   );
 }

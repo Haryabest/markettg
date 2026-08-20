@@ -1,4 +1,19 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+import { dismissBanner, notifyError, notifySlow } from "@/stores/banners";
+
+function apiBase(): string {
+  const raw = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
+  if (raw) {
+    if (typeof window !== "undefined" && (raw.includes("localhost") || raw.includes("127.0.0.1"))) {
+      return "";
+    }
+    return raw;
+  }
+  return typeof window === "undefined" ? "http://localhost:8080" : "";
+}
+
+const API_URL = apiBase();
+
+const SLOW_REQUEST_MS = 2500;
 
 export type ApiError = {
   error: { code: string; message: string; request_id?: string };
@@ -20,13 +35,36 @@ export class ApiClient {
       headers["Authorization"] = `tma ${this.initData}`;
     }
 
-    const res = await fetch(`${API_URL}${path}`, { ...options, headers });
-    if (!res.ok) {
-      const err = (await res.json().catch(() => ({}))) as ApiError;
-      throw new Error(err.error?.message || `HTTP ${res.status}`);
+    let slowId: string | null = null;
+    let slowTimer: number | undefined;
+    if (typeof window !== "undefined") {
+      slowTimer = window.setTimeout(() => {
+        slowId = notifySlow("Подключаемся…", "Сервер отвечает дольше обычного, подождите немного.");
+      }, SLOW_REQUEST_MS);
     }
-    if (res.status === 204) return {} as T;
-    return res.json();
+
+    try {
+      const res = await fetch(`${API_URL}${path}`, {
+        ...options,
+        headers,
+        signal: options.signal ?? AbortSignal.timeout(12_000),
+      });
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as ApiError;
+        throw new Error(err.error?.message || `HTTP ${res.status}`);
+      }
+      if (res.status === 204) return {} as T;
+      return res.json();
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        notifyError("Сервер не отвечает", "Проверьте сеть или попробуйте позже.");
+        throw new Error("Сервер не отвечает. Откройте магазин заново или проверьте сеть.");
+      }
+      throw error;
+    } finally {
+      if (slowTimer !== undefined) window.clearTimeout(slowTimer);
+      if (slowId) dismissBanner(slowId);
+    }
   }
 
   authTelegram(initData: string) {
@@ -107,6 +145,10 @@ export class ApiClient {
   removeFavorite(productId: string) {
     return this.request(`/api/v1/favorites/${productId}`, { method: "DELETE" });
   }
+
+  getReferrals() {
+    return this.request<ReferralProfile>("/api/v1/referrals/me");
+  }
 }
 
 export const api = new ApiClient();
@@ -127,15 +169,36 @@ export type Category = {
   description?: string;
 };
 
+export type DeliveryConfig = {
+  type?: string;
+  amount?: number;
+  duration_days?: number;
+  gift_id?: string;
+  telegram_gift_id?: string;
+  star_count?: number;
+  total_count?: number;
+  remaining_count?: number;
+  telegram_synced?: boolean;
+  nft_slug?: string;
+  gift_num?: number;
+  base_gift_id?: number;
+};
+
 export type Product = {
   id: string;
   slug: string;
   name: string;
   description?: string;
   price_kopecks: number;
+  sale_price_kopecks?: number | null;
+  on_sale?: boolean;
+  currency?: string;
   product_type: string;
   image_url?: string;
   popularity_score: number;
+  categories?: Category[];
+  delivery_config?: DeliveryConfig;
+  created_at?: string;
 };
 
 export type ProductListResult = {
@@ -160,6 +223,7 @@ export type Order = {
   id: string;
   status: string;
   total_kopecks: number;
+  discount_kopecks?: number;
   items?: OrderItem[];
   created_at: string;
 };
@@ -178,4 +242,27 @@ export type PaymentResult = {
   status: string;
   method: string;
   amount_kopecks: number;
+};
+
+export type ReferralReward = {
+  id: string;
+  promo_code: string;
+  discount_type: string;
+  discount_value: number;
+  is_used: boolean;
+  reward_type: string;
+};
+
+export type ReferralProfile = {
+  code: string;
+  link: string;
+  invited_count: number;
+  qualified_count: number;
+  pending_count: number;
+  total_bonus_kopecks: number;
+  rewards: ReferralReward[];
+  bonus_info: {
+    referred_welcome: string;
+    referrer_reward: string;
+  };
 };

@@ -45,8 +45,11 @@ func main() {
 	catalogClient := catalog.NewClient(config.GetEnv("CATALOG_SERVICE_URL", "http://catalog-service:8082"))
 	cartStore := cart.New(redisClient)
 	repo := repository.New(pool)
-	svc := service.New(repo, cartStore, catalogClient, redisClient)
-	userClient := user.NewClient(config.GetEnv("USER_SERVICE_URL", "http://user-service:8081"))
+	userClient := user.NewClient(
+		config.GetEnv("USER_SERVICE_URL", "http://user-service:8081"),
+		config.GetEnv("BOT_INTERNAL_SECRET", "bot-secret"),
+	)
+	svc := service.New(repo, cartStore, catalogClient, redisClient, userClient)
 	h := handler.New(svc, userClient)
 
 	publisher := outbox.NewPublisher(pool, redisClient, "orders", redisutil.StreamOrders)

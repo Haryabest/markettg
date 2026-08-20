@@ -250,6 +250,8 @@ func (r *CatalogRepository) ListProducts(ctx context.Context, f ProductFilter) (
 		orderBy = "p.price_kopecks DESC, p.name ASC"
 	case "name":
 		orderBy = "p.name ASC"
+	case "newest":
+		orderBy = "p.created_at DESC, p.name ASC"
 	case "relevance":
 		if f.Query != "" {
 			orderBy = fmt.Sprintf("(%s * 0.7 + %s * 0.3) DESC, p.popularity_score DESC", searchRank, searchSim)
@@ -336,6 +338,10 @@ func (r *CatalogRepository) ListProducts(ctx context.Context, f ProductFilter) (
 	totalPages := int(total) / f.Limit
 	if int(total)%f.Limit != 0 {
 		totalPages++
+	}
+
+	if products == nil {
+		products = []Product{}
 	}
 
 	return &ProductListResult{
@@ -795,7 +801,7 @@ func scanProductRow(row productScanner) (*Product, error) {
 }
 
 func scanProducts(rows pgx.Rows, withScores bool) ([]Product, error) {
-	var products []Product
+	products := make([]Product, 0)
 	for rows.Next() {
 		var p Product
 		var discountType *string

@@ -4,14 +4,17 @@ import asyncio
 import logging
 import os
 
-from aiogram import Bot, Dispatcher, F
+from aiogram import Bot, Dispatcher
 from aiogram.filters import Command
-from aiogram.types import Message, WebAppInfo
+from aiogram.types import MenuButtonWebApp, Message, WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiohttp import web
 
 from bot.api import GatewayClient
+from bot.catalog_client import CatalogClient
 from bot.config import settings
+from bot.gifts_sync import sync_telegram_gifts
+from bot.nft_sync import sync_nft_gifts
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -19,17 +22,28 @@ logger = logging.getLogger(__name__)
 bot = Bot(token=settings.bot_token)
 dp = Dispatcher()
 gateway = GatewayClient(settings.gateway_url, settings.bot_secret)
+catalog = CatalogClient(settings.catalog_url, settings.bot_secret)
 
 
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
+    parts = (message.text or "").split(maxsplit=1)
+    start_param = parts[1].strip() if len(parts) > 1 else ""
+
     builder = InlineKeyboardBuilder()
     builder.button(text="🛍 Открыть магазин", web_app=WebAppInfo(url=settings.mini_app_url))
-    await message.answer(
+
+    text = (
         "Добро пожаловать в MarketTG!\n\n"
-        "Покупайте Telegram Stars, Premium и подарки.",
-        reply_markup=builder.as_markup(),
+        "Покупайте Telegram Stars, Premium и подарки."
     )
+    if start_param.startswith("ref_"):
+        text += (
+            "\n\n🎁 Вы перешли по реферальной ссылке — после входа в магазин "
+            "друг получит 5% на первый заказ, а пригласивший — 100 ₽ бонусом."
+        )
+
+    await message.answer(text, reply_markup=builder.as_markup())
 
 
 @dp.message(Command("orders"))
@@ -82,8 +96,27 @@ async def start_http_server():
     logger.info("HTTP server started on :8090")
 
 
+async def gifts_sync_worker():
+    if not settings.bot_token:
+        logger.warning("TELEGRAM_BOT_TOKEN missing — gifts sync disabled")
+        return
+    while True:
+        try:
+            await sync_telegram_gifts(bot, catalog)
+            await sync_nft_gifts(catalog)
+        except Exception as exc:
+            logger.error("gifts sync error: %s", exc)
+        await asyncio.sleep(settings.gifts_sync_interval_sec)
+
+
 async def main():
     await start_http_server()
+    if settings.mini_app_url:
+        await bot.set_chat_menu_button(
+            menu_button=MenuButtonWebApp(text="Магазин", web_app=WebAppInfo(url=settings.mini_app_url))
+        )
+        logger.info("Mini App menu button set to %s", settings.mini_app_url)
+    asyncio.create_task(gifts_sync_worker())
     await dp.start_polling(bot)
 
 

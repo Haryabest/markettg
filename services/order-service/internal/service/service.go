@@ -9,6 +9,7 @@ import (
 	"github.com/markettg/markettg/services/order-service/internal/cart"
 	"github.com/markettg/markettg/services/order-service/internal/catalog"
 	"github.com/markettg/markettg/services/order-service/internal/repository"
+	"github.com/markettg/markettg/services/order-service/internal/user"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -17,10 +18,11 @@ type Service struct {
 	cart    *cart.Store
 	catalog *catalog.Client
 	redis   *redis.Client
+	users   *user.Client
 }
 
-func New(repo *repository.Repository, cartStore *cart.Store, catalogClient *catalog.Client, redis *redis.Client) *Service {
-	return &Service{repo: repo, cart: cartStore, catalog: catalogClient, redis: redis}
+func New(repo *repository.Repository, cartStore *cart.Store, catalogClient *catalog.Client, redis *redis.Client, users *user.Client) *Service {
+	return &Service{repo: repo, cart: cartStore, catalog: catalogClient, redis: redis, users: users}
 }
 
 func (s *Service) GetCart(ctx context.Context, userID string) (*cart.Cart, error) {
@@ -57,21 +59,37 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 	total := validation.TotalKopecks
 	var discount int64
 	var promoID *uuid.UUID
+	var referralRewardID string
 
 	if req.PromoCode != "" {
 		promo, err := s.repo.GetPromoCode(ctx, req.PromoCode)
 		if err != nil || promo == nil {
-			return nil, apperrors.ErrInvalidPromoCode
-		}
-		if promo.ValidTo != nil && promo.ValidTo.Before(time.Now()) {
-			return nil, apperrors.ErrInvalidPromoCode
-		}
-		promoID = &promo.ID
-		switch promo.DiscountType {
-		case "PERCENT":
-			discount = total * promo.DiscountValue / 100
-		case "FIXED":
-			discount = promo.DiscountValue
+			if s.users != nil {
+				refPromo, refErr := s.users.ValidateReferralPromo(ctx, userID, req.PromoCode)
+				if refErr != nil || refPromo == nil {
+					return nil, apperrors.ErrInvalidPromoCode
+				}
+				switch refPromo.DiscountType {
+				case "PERCENT":
+					discount = total * refPromo.DiscountValue / 100
+				case "FIXED":
+					discount = refPromo.DiscountValue
+				}
+				referralRewardID = refPromo.RewardID
+			} else {
+				return nil, apperrors.ErrInvalidPromoCode
+			}
+		} else {
+			if promo.ValidTo != nil && promo.ValidTo.Before(time.Now()) {
+				return nil, apperrors.ErrInvalidPromoCode
+			}
+			promoID = &promo.ID
+			switch promo.DiscountType {
+			case "PERCENT":
+				discount = total * promo.DiscountValue / 100
+			case "FIXED":
+				discount = promo.DiscountValue
+			}
 		}
 		if discount > total {
 			discount = total
@@ -114,6 +132,12 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 
 	if promoID != nil {
 		_ = s.repo.UsePromoCode(ctx, *promoID, userID, created.ID)
+	}
+	if referralRewardID != "" && s.users != nil {
+		_ = s.users.MarkReferralPromoUsed(ctx, referralRewardID)
+	}
+	if s.users != nil {
+		_ = s.users.CompleteReferralOrder(ctx, userID, created.ID)
 	}
 
 	_ = s.cart.Clear(ctx, userID.String())

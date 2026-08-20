@@ -60,11 +60,12 @@ func main() {
 	app.Use(rateLimiter.Middleware())
 
 	auth := gwmw.NewAuth(gwmw.AuthConfig{
-		BotToken:      config.GetEnv("TELEGRAM_BOT_TOKEN", ""),
-		BotSecret:     config.GetEnv("BOT_INTERNAL_SECRET", "bot-secret"),
-		JWTSecret:     config.GetEnv("JWT_SECRET", "dev-jwt-secret"),
+		BotToken:       config.GetEnv("TELEGRAM_BOT_TOKEN", ""),
+		BotSecret:      config.GetEnv("BOT_INTERNAL_SECRET", "bot-secret"),
+		JWTSecret:      config.GetEnv("JWT_SECRET", "dev-jwt-secret"),
 		AdminJWTSecret: config.GetEnv("ADMIN_JWT_SECRET", "dev-admin-jwt-secret"),
 	})
+	userResolver := gwmw.NewUserResolver(services.User, config.GetEnv("BOT_INTERNAL_SECRET", "bot-secret"))
 
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok", "service": "gateway"})
@@ -84,11 +85,12 @@ func main() {
 	api.Post("/admin/auth/refresh", proxy.Forward(services.User))
 
 	// Protected user routes
-	userRoutes := api.Group("", auth.TelegramAuth())
+	userRoutes := api.Group("", auth.TelegramAuth(), userResolver.ResolveUserID())
 	userRoutes.Get("/me", proxy.Forward(services.User))
 	userRoutes.Get("/favorites", proxy.Forward(services.User))
 	userRoutes.Post("/favorites/:productId", proxy.Forward(services.User))
 	userRoutes.Delete("/favorites/:productId", proxy.Forward(services.User))
+	userRoutes.Get("/referrals/me", proxy.Forward(services.User))
 
 	// Cart & orders
 	userRoutes.Get("/cart", proxy.Forward(services.Order))

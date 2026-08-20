@@ -1,54 +1,139 @@
 "use client";
 
 import { useEffect } from "react";
-import Link from "next/link";
-import { useCartStore } from "@/stores/app";
+import { useQueries } from "@tanstack/react-query";
+import { Banner } from "@astryxdesign/core/Banner";
+import { Button } from "@astryxdesign/core/Button";
+import { EmptyState } from "@astryxdesign/core/EmptyState";
+import { Heading } from "@astryxdesign/core/Heading";
+import { HStack } from "@astryxdesign/core/HStack";
+import { List, ListItem } from "@astryxdesign/core/List";
+import { NumberInput } from "@astryxdesign/core/NumberInput";
+import { Text } from "@astryxdesign/core/Text";
+import { VStack } from "@astryxdesign/core/VStack";
+import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
+import { effectivePrice, productShortHint } from "@/lib/product";
+import { AppIcon, productTypeIcon } from "@/components/icons";
+import { useCartStore } from "@/stores/app";
+import { CreditCard, ShoppingBag, Trash2 } from "lucide-react";
 
 export default function CartPage() {
-  const { cart, fetchCart, addItem, removeItem } = useCartStore();
+  const { cart, fetchCart, addItem, removeItem, isLocal } = useCartStore();
 
   useEffect(() => {
     fetchCart();
   }, [fetchCart]);
 
   const items = cart?.items || [];
+  const products = useQueries({
+    queries: items.map((item) => ({
+      queryKey: ["product", item.product_id],
+      queryFn: () => api.getProduct(item.product_id),
+    })),
+  });
+
+  const total = items.reduce((sum, item, index) => {
+    const product = products[index]?.data;
+    if (!product) return sum;
+    return sum + effectivePrice(product) * item.quantity;
+  }, 0);
+  const quantity = items.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Корзина</h1>
+    <VStack gap={4}>
+      <VStack gap={1}>
+        <Heading level={1}>Корзина</Heading>
+        <Text type="supporting" color="secondary" display="block">
+          {items.length
+            ? `${quantity} шт. · к оплате ${formatPrice(total)}`
+            : "Соберите заказ из Stars, Premium или подарков."}
+        </Text>
+      </VStack>
+      {isLocal ? (
+        <Banner
+          status="warning"
+          title="Локальная корзина"
+          description="Для оплаты откройте магазин из Telegram — тогда корзина синхронизируется с аккаунтом."
+          isDismissable
+        />
+      ) : null}
       {items.length === 0 ? (
-        <div className="py-12 text-center text-zinc-500">
-          <p>Корзина пуста</p>
-          <Link href="/catalog" className="mt-4 inline-block text-[var(--tg-theme-link-color,#2481cc)]">
-            Перейти в каталог
-          </Link>
-        </div>
+        <EmptyState
+          title="Корзина пуста"
+          description="Добавьте Stars, Premium или подарок — доставим сразу после оплаты."
+          actions={
+            <Button
+              label="В каталог"
+              href="/catalog"
+              variant="primary"
+              icon={<AppIcon icon={ShoppingBag} />}
+            />
+          }
+        />
       ) : (
         <>
-          <ul className="space-y-3">
-            {items.map((item) => (
-              <li key={item.product_id} className="flex items-center justify-between rounded-2xl bg-zinc-50 p-4">
-                <Link href={`/product/${item.product_id}`} className="text-sm font-medium">
-                  Товар {item.product_id.slice(0, 8)}...
-                </Link>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => addItem(item.product_id, Math.max(0, item.quantity - 1))} className="h-8 w-8 rounded-full bg-zinc-200">−</button>
-                  <span>{item.quantity}</span>
-                  <button onClick={() => addItem(item.product_id, item.quantity + 1)} className="h-8 w-8 rounded-full bg-zinc-200">+</button>
-                  <button onClick={() => removeItem(item.product_id)} className="ml-2 text-red-500">✕</button>
-                </div>
-              </li>
-            ))}
-          </ul>
-          <Link
+          <List hasDividers>
+            {items.map((item, index) => {
+              const product = products[index]?.data;
+              const Icon = productTypeIcon(product?.product_type || "GIFT", product?.delivery_config?.gift_id);
+              const unit = product ? effectivePrice(product) : 0;
+              return (
+                <ListItem
+                  key={item.product_id}
+                  href={product ? `/product/${product.id}` : undefined}
+                  startContent={<AppIcon icon={Icon} size={20} />}
+                  label={product?.name || `Товар ${item.product_id.slice(0, 8)}`}
+                  description={
+                    product
+                      ? `${productShortHint(product)} · ${formatPrice(unit)} × ${item.quantity} = ${formatPrice(unit * item.quantity)}`
+                      : "Загрузка товара…"
+                  }
+                  endContent={
+                    <HStack gap={2} align="center">
+                      <NumberInput
+                        label="Количество"
+                        isLabelHidden
+                        value={item.quantity}
+                        min={1}
+                        max={99}
+                        isIntegerOnly
+                        hasNumberSteppers
+                        width={96}
+                        onChange={(value) => addItem(item.product_id, value)}
+                      />
+                      <Button
+                        label="Удалить"
+                        variant="ghost"
+                        size="sm"
+                        isIconOnly
+                        icon={<AppIcon icon={Trash2} size={16} />}
+                        clickAction={() => removeItem(item.product_id)}
+                      />
+                    </HStack>
+                  }
+                />
+              );
+            })}
+          </List>
+          <VStack gap={1}>
+            <Text type="body" weight="medium" display="block">
+              Итого: {formatPrice(total)}
+            </Text>
+            <Text type="supporting" color="secondary" display="block">
+              Промокод WELCOME10 можно ввести на следующем шаге. Оплата Stars или СБП.
+            </Text>
+          </VStack>
+          <Button
+            label="Оформить заказ"
             href="/checkout"
-            className="block w-full rounded-2xl bg-[var(--tg-theme-button-color,#2481cc)] py-4 text-center text-lg font-semibold text-white"
-          >
-            Оформить заказ
-          </Link>
+            variant="primary"
+            size="lg"
+            width="100%"
+            icon={<AppIcon icon={CreditCard} />}
+          />
         </>
       )}
-    </div>
+    </VStack>
   );
 }

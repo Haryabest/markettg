@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"path"
@@ -80,6 +81,16 @@ func (s *S3Repository) PublicURL(key string) string {
 		return ""
 	}
 	return fmt.Sprintf("%s/%s", s.publicURL, strings.TrimLeft(key, "/"))
+}
+
+func (s *S3Repository) PutBytes(ctx context.Context, key string, data []byte, contentType string) error {
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	_, err := s.client.PutObject(ctx, s.bucket, strings.TrimLeft(key, "/"), bytes.NewReader(data), int64(len(data)), minio.PutObjectOptions{
+		ContentType: contentType,
+	})
+	return err
 }
 
 func ApplyImageURLs(products []Product, s3 *S3Repository) {

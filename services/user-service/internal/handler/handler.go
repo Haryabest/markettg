@@ -148,3 +148,73 @@ func (h *Handler) AdminListUsers(c *fiber.Ctx) error {
 func (h *Handler) AdminAuditLog(c *fiber.Ctx) error {
 	return httputil.JSON(c, fiber.StatusOK, fiber.Map{"logs": []any{}})
 }
+
+func (h *Handler) GetReferrals(c *fiber.Ctx) error {
+	tid, err := h.getTelegramID(c)
+	if err != nil {
+		return fiber.ErrUnauthorized
+	}
+	profile, err := h.svc.GetReferralProfile(c.Context(), tid)
+	if err != nil {
+		return err
+	}
+	return httputil.JSON(c, fiber.StatusOK, profile)
+}
+
+func (h *Handler) InternalValidateReferralPromo(c *fiber.Ctx) error {
+	var req struct {
+		UserID    string `json:"user_id"`
+		PromoCode string `json:"promo_code"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.ErrBadRequest
+	}
+	userID, err := uuid.Parse(req.UserID)
+	if err != nil {
+		return fiber.ErrBadRequest
+	}
+	promo, err := h.svc.ValidateReferralPromo(c.Context(), userID, req.PromoCode)
+	if err != nil {
+		return err
+	}
+	return httputil.JSON(c, fiber.StatusOK, promo)
+}
+
+func (h *Handler) InternalMarkReferralPromoUsed(c *fiber.Ctx) error {
+	var req struct {
+		RewardID string `json:"reward_id"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.ErrBadRequest
+	}
+	rewardID, err := uuid.Parse(req.RewardID)
+	if err != nil {
+		return fiber.ErrBadRequest
+	}
+	if err := h.svc.MarkReferralPromoUsed(c.Context(), rewardID); err != nil {
+		return err
+	}
+	return httputil.JSON(c, fiber.StatusOK, fiber.Map{"ok": true})
+}
+
+func (h *Handler) InternalCompleteReferralOrder(c *fiber.Ctx) error {
+	var req struct {
+		UserID  string `json:"user_id"`
+		OrderID string `json:"order_id"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.ErrBadRequest
+	}
+	userID, err := uuid.Parse(req.UserID)
+	if err != nil {
+		return fiber.ErrBadRequest
+	}
+	orderID, err := uuid.Parse(req.OrderID)
+	if err != nil {
+		return fiber.ErrBadRequest
+	}
+	if err := h.svc.CompleteReferralOrder(c.Context(), userID, orderID); err != nil {
+		return err
+	}
+	return httputil.JSON(c, fiber.StatusOK, fiber.Map{"ok": true})
+}

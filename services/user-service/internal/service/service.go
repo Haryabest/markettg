@@ -2,28 +2,30 @@ package service
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/markettg/markettg/packages/go-shared/pkg/apperrors"
 	"github.com/markettg/markettg/packages/go-shared/pkg/config"
-	"github.com/markettg/markettg/packages/go-shared/pkg/telegram"
 	"github.com/markettg/markettg/services/user-service/internal/repository"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type Service struct {
-	repo      *repository.Repository
-	jwtSecret string
-	botToken  string
+	repo         *repository.Repository
+	jwtSecret    string
+	botToken     string
+	botUsername  string
 }
 
 func New(repo *repository.Repository, jwtSecret string) *Service {
 	return &Service{
-		repo:      repo,
-		jwtSecret: jwtSecret,
-		botToken:  config.GetEnv("TELEGRAM_BOT_TOKEN", ""),
+		repo:        repo,
+		jwtSecret:   jwtSecret,
+		botToken:    config.GetEnv("TELEGRAM_BOT_TOKEN", ""),
+		botUsername: strings.TrimPrefix(config.GetEnv("TELEGRAM_BOT_USERNAME", ""), "@"),
 	}
 }
 
@@ -33,15 +35,7 @@ type AuthResponse struct {
 }
 
 func (s *Service) AuthTelegram(ctx context.Context, initData string) (*AuthResponse, error) {
-	data, err := telegram.ValidateInitData(initData, s.botToken, 24*time.Hour)
-	if err != nil || data.User == nil {
-		return nil, apperrors.ErrUnauthorized
-	}
-	user, err := s.repo.UpsertUser(ctx, data.User)
-	if err != nil {
-		return nil, apperrors.ErrInternal
-	}
-	return &AuthResponse{User: user}, nil
+	return s.authTelegramWithReferral(ctx, initData)
 }
 
 func (s *Service) GetMe(ctx context.Context, telegramID int64) (*repository.User, error) {

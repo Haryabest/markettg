@@ -1,50 +1,192 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { useParams } from "next/navigation";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useParams, useRouter } from "next/navigation";
+import { Badge } from "@astryxdesign/core/Badge";
+import { Button } from "@astryxdesign/core/Button";
+import { EmptyState } from "@astryxdesign/core/EmptyState";
+import { Heading } from "@astryxdesign/core/Heading";
+import { HStack } from "@astryxdesign/core/HStack";
+import { List, ListItem } from "@astryxdesign/core/List";
+import { Skeleton } from "@astryxdesign/core/Skeleton";
+import { Text } from "@astryxdesign/core/Text";
+import { VStack } from "@astryxdesign/core/VStack";
 import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
+import { effectivePrice, giftStarLabel, productBadge, productFacts, productShortHint } from "@/lib/product";
+import { AppIcon, productTypeIcon } from "@/components/icons";
+import { FilledButton } from "@/components/filled-button";
+import { notifyError } from "@/stores/banners";
 import { useCartStore } from "@/stores/app";
-import { Skeleton } from "@/components/ui";
-import Image from "next/image";
+import { Check, CreditCard, Heart, ShoppingBag, Zap, ArrowLeft } from "lucide-react";
 
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const addItem = useCartStore((s) => s.addItem);
+  const queryClient = useQueryClient();
 
-  const { data: product, isLoading } = useQuery({
+  const { data: product, isLoading, isError } = useQuery({
     queryKey: ["product", id],
     queryFn: () => api.getProduct(id),
     enabled: !!id,
   });
 
-  if (isLoading) return <Skeleton className="h-96" />;
-  if (!product) return <p>Товар не найден</p>;
+  const { data: favs } = useQuery({
+    queryKey: ["favorites"],
+    queryFn: () => api.getFavorites(),
+    retry: false,
+  });
+
+  const favorite = Boolean(product && favs?.product_ids?.includes(product.id));
+
+  const toggleFav = useMutation({
+    mutationFn: async () => {
+      if (!product) return;
+      if (favorite) await api.removeFavorite(product.id);
+      else await api.addFavorite(product.id);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["favorites"] }),
+    onError: (error) => {
+      notifyError("Избранное недоступно", error instanceof Error ? error.message : "Нужен вход через Telegram");
+    },
+  });
+
+  const handleBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.push("/catalog");
+  };
+
+  if (isLoading) return <Skeleton height={420} />;
+  if (isError || !product) {
+    return (
+      <VStack gap={4}>
+        <FilledButton
+          label="Назад"
+          icon={<AppIcon icon={ArrowLeft} size={18} />}
+          size="md"
+          onClick={handleBack}
+        />
+        <EmptyState
+          title="Товар не найден"
+          description="Вернитесь в каталог и выберите другой пакет Stars, Premium или подарок."
+          actions={<Button label="В каталог" href="/catalog" variant="primary" />}
+        />
+      </VStack>
+    );
+  }
+
+  const badge = productBadge(product.product_type);
+  const Icon = productTypeIcon(product.product_type, product.delivery_config?.gift_id);
+  const price = effectivePrice(product);
+  const hasSale = Boolean(product.on_sale && product.sale_price_kopecks && product.sale_price_kopecks < product.price_kopecks);
+  const facts = productFacts(product);
+
+  const handleAddToCart = async () => {
+    await addItem(product.id, 1);
+  };
+
+  const handleBuyNow = async () => {
+    const ok = await addItem(product.id, 1);
+    if (!ok) {
+      notifyError("Не удалось оформить", "Попробуйте ещё раз или откройте магазин из Telegram");
+      return;
+    }
+    router.push("/checkout");
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="relative aspect-square overflow-hidden rounded-2xl bg-zinc-100">
+    <VStack gap={5}>
+      <FilledButton
+        label="Назад"
+        icon={<AppIcon icon={ArrowLeft} size={18} />}
+        size="md"
+        onClick={handleBack}
+      />
+      <div className="flex aspect-square items-center justify-center rounded-[var(--radius-container,16px)] bg-[radial-gradient(circle_at_center,#1a2238_0%,#0d0f14_70%)]">
         {product.image_url ? (
-          <Image src={product.image_url} alt={product.name} fill className="object-cover" unoptimized />
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={product.image_url}
+            alt=""
+            className="h-[78%] w-[78%] object-contain drop-shadow-[0_16px_36px_rgba(0,0,0,0.45)]"
+          />
         ) : (
-          <div className="flex h-full items-center justify-center text-6xl">
-            {product.product_type === "STARS" ? "⭐" : product.product_type === "PREMIUM" ? "👑" : "🎁"}
-          </div>
+          <AppIcon icon={Icon} size={72} />
         )}
       </div>
-      <div>
-        <h1 className="text-2xl font-bold">{product.name}</h1>
-        <p className="mt-2 text-2xl font-semibold text-[var(--tg-theme-link-color,#2481cc)]">
-          {formatPrice(product.price_kopecks)}
-        </p>
-        {product.description && <p className="mt-4 text-zinc-600">{product.description}</p>}
-      </div>
-      <button
-        onClick={() => addItem(product.id, 1)}
-        className="w-full rounded-2xl bg-[var(--tg-theme-button-color,#2481cc)] py-4 text-lg font-semibold text-[var(--tg-theme-button-text-color,#fff)]"
-      >
-        В корзину
-      </button>
-    </div>
+      <VStack gap={2}>
+        <HStack gap={2} align="center">
+          <Badge variant={badge.variant} label={badge.label} />
+          {product.categories?.map((cat) => (
+            <Badge key={cat.id} variant="neutral" label={cat.name} />
+          ))}
+          {hasSale ? <Badge variant="red" label="Скидка" /> : null}
+        </HStack>
+        <Heading level={1}>{product.name}</Heading>
+        <Text type="supporting" color="secondary" display="block">
+          {productShortHint(product)}
+        </Text>
+        <HStack gap={2} align="center">
+          <Text type="large" weight="semibold" color="accent" display="block">
+            {giftStarLabel(product) || formatPrice(price)}
+          </Text>
+          {giftStarLabel(product) ? (
+            <Text type="body" color="secondary" display="block">
+              ≈ {formatPrice(price)}
+            </Text>
+          ) : null}
+          {hasSale ? (
+            <Text type="body" color="secondary" display="block">
+              <s>{formatPrice(product.price_kopecks)}</s>
+            </Text>
+          ) : null}
+        </HStack>
+        {product.description && (
+          <Text type="body" color="secondary" display="block">
+            {product.description}
+          </Text>
+        )}
+      </VStack>
+      <List hasDividers header="Что входит">
+        {facts.map((fact) => (
+          <ListItem
+            key={fact}
+            startContent={<AppIcon icon={fact.includes("сразу") ? Zap : Check} size={16} />}
+            label={fact}
+          />
+        ))}
+      </List>
+      <VStack gap={2}>
+        <Button
+          label={`Купить сейчас · ${formatPrice(price)}`}
+          variant="primary"
+          size="lg"
+          width="100%"
+          icon={<AppIcon icon={CreditCard} />}
+          clickAction={handleBuyNow}
+        />
+        <HStack gap={2}>
+          <FilledButton
+            label={favorite ? "В избранном" : "В избранное"}
+            active={favorite}
+            size="md"
+            icon={<AppIcon icon={Heart} />}
+            onClick={() => toggleFav.mutateAsync()}
+            className="flex-1"
+          />
+          <FilledButton
+            label="В корзину"
+            size="md"
+            icon={<AppIcon icon={ShoppingBag} />}
+            onClick={handleAddToCart}
+            className="flex-1"
+          />
+        </HStack>
+      </VStack>
+    </VStack>
   );
 }

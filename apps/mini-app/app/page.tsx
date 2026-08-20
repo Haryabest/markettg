@@ -1,86 +1,139 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import Link from "next/link";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Banner } from "@astryxdesign/core/Banner";
+import { Heading } from "@astryxdesign/core/Heading";
+import { HStack } from "@astryxdesign/core/HStack";
+import { Link } from "@astryxdesign/core/Link";
+import { Text } from "@astryxdesign/core/Text";
+import { VStack } from "@astryxdesign/core/VStack";
+import { Grid } from "@astryxdesign/core/Grid";
 import { api } from "@/lib/api";
-import { ProductCard, Skeleton } from "@/components/ui";
+import { AppIcon } from "@/components/icons";
+import { ProductGrid } from "@/components/product-grid";
+import { Bolt, ShieldCheck, Truck } from "lucide-react";
 
 export default function HomePage() {
+  const queryClient = useQueryClient();
+
   const { data: promos } = useQuery({
     queryKey: ["promotions"],
     queryFn: () => api.getPromotions(),
   });
 
-  const { data: categories } = useQuery({
-    queryKey: ["categories"],
-    queryFn: () => api.getCategories(),
-  });
-
-  const { data: popular } = useQuery({
+  const {
+    data: popular,
+    isLoading: popularLoading,
+    isError: popularError,
+  } = useQuery({
     queryKey: ["products", "popular"],
-    queryFn: () => api.getProducts({ sort: "popularity", limit: "6" }),
+    queryFn: () => api.getProducts({ sort: "popularity", limit: "8" }),
   });
 
-  const { data: newest } = useQuery({
+  const {
+    data: newest,
+    isLoading: newestLoading,
+    isError: newestError,
+  } = useQuery({
     queryKey: ["products", "newest"],
     queryFn: () => api.getProducts({ sort: "newest", limit: "6" }),
   });
 
   return (
-    <div className="space-y-8">
-      <header>
-        <h1 className="text-2xl font-bold">MarketTG</h1>
-        <p className="text-sm text-zinc-500">Stars · Premium · Gifts</p>
-      </header>
+    <VStack gap={6}>
+      <VStack gap={1}>
+        <Heading level={1}>MarketTG</Heading>
+        <Text type="supporting" color="secondary" display="block">
+          Магазин Telegram Stars, Premium и подарков. Оплата Stars или СБП, доставка на аккаунт сразу после оплаты.
+        </Text>
+      </VStack>
 
-      {promos?.items && promos.items.length > 0 && (
-        <section>
-          <h2 className="mb-3 text-lg font-semibold">Акции</h2>
-          <div className="space-y-2">
-            {promos.items.map((p) => (
-              <div key={p.id} className="rounded-2xl bg-gradient-to-r from-blue-500 to-purple-600 p-4 text-white">
-                <h3 className="font-semibold">{p.title}</h3>
-                {p.description && <p className="text-sm opacity-90">{p.description}</p>}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      {promos?.items?.map((promo) => (
+        <Banner
+          key={promo.id}
+          status="info"
+          title={promo.title}
+          description={
+            promo.description ||
+            (promo.discount_type === "PERCENT"
+              ? `Скидка ${promo.discount_value}% по промокоду на оформлении`
+              : `Скидка ${promo.discount_value / 100} ₽`)
+          }
+        />
+      ))}
 
-      <section>
-        <h2 className="mb-3 text-lg font-semibold">Категории</h2>
-        <div className="grid grid-cols-3 gap-2">
-          {categories?.items?.map((c) => (
-            <Link
-              key={c.id}
-              href={`/catalog?category=${c.slug}`}
-              className="rounded-2xl bg-[var(--tg-theme-secondary-bg-color,#f4f4f5)] p-4 text-center text-sm font-medium"
-            >
-              {c.name}
-            </Link>
-          )) || Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16" />)}
-        </div>
-      </section>
+      <Grid columns={3} gap={2}>
+        <VStack gap={1} align="center">
+          <AppIcon icon={Bolt} size={20} />
+          <Text type="label" weight="medium" justify="center" display="block">
+            Сразу
+          </Text>
+          <Text type="supporting" color="secondary" justify="center" display="block">
+            После оплаты
+          </Text>
+        </VStack>
+        <VStack gap={1} align="center">
+          <AppIcon icon={ShieldCheck} size={20} />
+          <Text type="label" weight="medium" justify="center" display="block">
+            На аккаунт
+          </Text>
+          <Text type="supporting" color="secondary" justify="center" display="block">
+            Официально
+          </Text>
+        </VStack>
+        <VStack gap={1} align="center">
+          <AppIcon icon={Truck} size={20} />
+          <Text type="label" weight="medium" justify="center" display="block">
+            Без очереди
+          </Text>
+          <Text type="supporting" color="secondary" justify="center" display="block">
+            24/7
+          </Text>
+        </VStack>
+      </Grid>
 
-      <section>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Популярное</h2>
-          <Link href="/catalog" className="text-sm text-[var(--tg-theme-link-color,#2481cc)]">Все</Link>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          {popular?.items?.map((p) => <ProductCard key={p.id} product={p} />) ||
-            Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-48" />)}
-        </div>
-      </section>
+      <VStack gap={3}>
+        <HStack justify="between" align="center">
+          <VStack gap={0}>
+            <Heading level={2}>Популярное</Heading>
+            <Text type="supporting" color="secondary" display="block">
+              {popular?.total ? `${popular.total} товаров в каталоге` : "Чаще всего покупают"}
+            </Text>
+          </VStack>
+          <Link href="/catalog" isStandalone>
+            Все
+          </Link>
+        </HStack>
+        <ProductGrid
+          products={popular?.items}
+          isLoading={popularLoading}
+          isError={popularError}
+          onRetry={() => queryClient.invalidateQueries({ queryKey: ["products"] })}
+          emptyTitle="Каталог пуст"
+          emptyDescription="Товары появятся после загрузки каталога."
+        />
+      </VStack>
 
-      <section>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Новинки</h2>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          {newest?.items?.map((p) => <ProductCard key={p.id} product={p} />)}
-        </div>
-      </section>
-    </div>
+      <VStack gap={3}>
+        <HStack justify="between" align="center">
+          <Heading level={2}>Новинки</Heading>
+          <Link href="/catalog?sort=newest" isStandalone>
+            Каталог
+          </Link>
+        </HStack>
+        <ProductGrid
+          products={newest?.items}
+          isLoading={newestLoading}
+          isError={newestError}
+          onRetry={() => queryClient.invalidateQueries({ queryKey: ["products", "newest"] })}
+        />
+      </VStack>
+
+      <Banner
+        status="info"
+        title="Как это работает"
+        description="Выберите товар → оплатите Stars или СБП → Stars, Premium или Gift придут в Telegram. Поддержка и статус заказа — в профиле."
+      />
+    </VStack>
   );
 }

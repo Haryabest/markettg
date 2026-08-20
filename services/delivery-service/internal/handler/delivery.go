@@ -108,17 +108,15 @@ func (h *PremiumDeliveryHandler) Deliver(ctx context.Context, telegramID int64, 
 	return respBody, nil
 }
 
-// GiftDeliveryHandler uses Fragment API
+// GiftDeliveryHandler sends official Telegram Star Gifts via Bot API.
 type GiftDeliveryHandler struct {
-	apiURL   string
-	apiToken string
+	botToken string
 	client   *http.Client
 }
 
 func NewGiftDeliveryHandler() *GiftDeliveryHandler {
 	return &GiftDeliveryHandler{
-		apiURL:   config.GetEnv("FRAGMENT_API_URL", "https://fragment.com/api"),
-		apiToken: config.GetEnv("FRAGMENT_API_TOKEN", ""),
+		botToken: config.GetEnv("TELEGRAM_BOT_TOKEN", ""),
 		client:   &http.Client{Timeout: 60 * time.Second},
 	}
 }
@@ -126,20 +124,25 @@ func NewGiftDeliveryHandler() *GiftDeliveryHandler {
 func (h *GiftDeliveryHandler) Type() string { return "GIFT" }
 
 func (h *GiftDeliveryHandler) Deliver(ctx context.Context, telegramID int64, cfg DeliveryConfig) (json.RawMessage, error) {
-	if h.apiToken == "" {
-		return json.RawMessage(fmt.Sprintf(`{"status":"simulated","gift_id":"%s"}`, cfg.GiftID)), nil
+	giftID := cfg.GiftID
+	if giftID == "" {
+		return nil, fmt.Errorf("gift_id is required")
 	}
+	if h.botToken == "" {
+		return json.RawMessage(fmt.Sprintf(`{"status":"simulated","gift_id":"%s"}`, giftID)), nil
+	}
+
 	payload := map[string]interface{}{
-		"recipient_id": telegramID,
-		"gift_id":      cfg.GiftID,
+		"user_id": telegramID,
+		"gift_id": giftID,
 	}
 	body, _ := json.Marshal(payload)
-	req, err := http.NewRequestWithContext(ctx, "POST", h.apiURL+"/gifts/send", jsonReader(body))
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendGift", h.botToken)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, jsonReader(body))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+h.apiToken)
 	resp, err := h.client.Do(req)
 	if err != nil {
 		return nil, err
@@ -147,7 +150,7 @@ func (h *GiftDeliveryHandler) Deliver(ctx context.Context, telegramID int64, cfg
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("fragment gift API error: %s", string(respBody))
+		return nil, fmt.Errorf("telegram sendGift error: %s", string(respBody))
 	}
 	return respBody, nil
 }

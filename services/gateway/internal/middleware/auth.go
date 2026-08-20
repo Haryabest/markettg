@@ -41,9 +41,6 @@ func (a *Auth) TelegramAuth() fiber.Handler {
 
 		c.Locals("telegram_id", data.User.ID)
 		c.Locals("telegram_user", data.User)
-		if uid := c.Get("X-User-Id"); uid != "" {
-			c.Locals("user_id", uid)
-		}
 		return c.Next()
 	}
 }

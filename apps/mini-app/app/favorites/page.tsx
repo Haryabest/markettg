@@ -1,30 +1,66 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { EmptyState } from "@astryxdesign/core/EmptyState";
+import { Heading } from "@astryxdesign/core/Heading";
+import { Text } from "@astryxdesign/core/Text";
+import { VStack } from "@astryxdesign/core/VStack";
+import { Button } from "@astryxdesign/core/Button";
 import { api } from "@/lib/api";
-import { ProductCard } from "@/components/ui";
+import { ProductGrid } from "@/components/product-grid";
+import { AppIcon } from "@/components/icons";
+import { ShoppingBag } from "lucide-react";
 
 export default function FavoritesPage() {
-  const { data: favs } = useQuery({ queryKey: ["favorites"], queryFn: () => api.getFavorites() });
-  const ids = favs?.product_ids?.join(",") || "";
+  const queryClient = useQueryClient();
+  const { data: favs, isLoading: favsLoading, isError } = useQuery({
+    queryKey: ["favorites"],
+    queryFn: () => api.getFavorites(),
+  });
 
-  const { data: products } = useQuery({
-    queryKey: ["fav-products", ids],
+  const { data: products, isLoading: productsLoading } = useQuery({
+    queryKey: ["fav-products", favs?.product_ids?.join(",") || ""],
     queryFn: async () => {
       if (!favs?.product_ids?.length) return { items: [] };
       const results = await Promise.all(favs.product_ids.map((id) => api.getProduct(id)));
       return { items: results };
     },
-    enabled: !!favs?.product_ids?.length,
+    enabled: !!favs,
   });
 
+  const empty = !favsLoading && !productsLoading && !products?.items?.length;
+
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Избранное</h1>
-      <div className="grid grid-cols-2 gap-3">
-        {products?.items?.map((p) => <ProductCard key={p.id} product={p} />)}
-      </div>
-      {!products?.items?.length && <p className="text-center text-zinc-500">Пока пусто</p>}
-    </div>
+    <VStack gap={4}>
+      <VStack gap={1}>
+        <Heading level={1}>Избранное</Heading>
+        <Text type="supporting" color="secondary" display="block">
+          Сохраняйте пакеты Stars, Premium и подарки, чтобы быстро купить их позже.
+        </Text>
+      </VStack>
+      {empty ? (
+        <EmptyState
+          title="Пока пусто"
+          description="Нажмите «В избранное» на карточке товара в каталоге."
+          actions={
+            <Button
+              label="В каталог"
+              href="/catalog"
+              variant="primary"
+              icon={<AppIcon icon={ShoppingBag} />}
+            />
+          }
+        />
+      ) : (
+        <ProductGrid
+          products={products?.items}
+          isLoading={favsLoading || productsLoading}
+          isError={isError}
+          onRetry={() => queryClient.invalidateQueries({ queryKey: ["favorites"] })}
+          emptyTitle="Пока пусто"
+          emptyDescription="Добавьте товары сердцем на странице товара."
+        />
+      )}
+    </VStack>
   );
 }

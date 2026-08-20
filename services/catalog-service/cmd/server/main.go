@@ -20,6 +20,7 @@ import (
 	"github.com/markettg/markettg/services/catalog-service/internal/handlers"
 	catmw "github.com/markettg/markettg/services/catalog-service/internal/middleware"
 	"github.com/markettg/markettg/services/catalog-service/internal/repository"
+	"github.com/markettg/markettg/services/catalog-service/internal/syncer"
 	"go.uber.org/zap"
 )
 
@@ -55,6 +56,11 @@ func main() {
 	catalogRepo := repository.NewCatalogRepository(pool)
 	catalogHandler := handlers.NewCatalogHandler(catalogRepo, s3Repo, catalogCache)
 	adminHandler := handlers.NewAdminHandler(catalogRepo, s3Repo, catalogCache)
+	giftsHandler := handlers.NewGiftsHandler(catalogRepo, s3Repo, catalogCache)
+	giftSyncer := syncer.NewGiftSyncer(catalogRepo, s3Repo, catalogCache, giftsHandler, log)
+	syncCtx, syncCancel := context.WithCancel(context.Background())
+	defer syncCancel()
+	go giftSyncer.Run(syncCtx)
 
 	app := fiber.New(fiber.Config{
 		AppName:      "catalog-service",
@@ -78,7 +84,11 @@ func main() {
 	catalog.Get("/promotions", catalogHandler.ListPromotions)
 
 	// Internal
-	api.Post("/internal/catalog/validate", catalogHandler.InternalValidateProducts)
+	internalSecret := config.GetEnv("BOT_INTERNAL_SECRET", "bot-secret")
+	internal := api.Group("/internal", catmw.InternalAuth(internalSecret))
+	internal.Post("/catalog/validate", catalogHandler.InternalValidateProducts)
+	internal.Post("/gifts/sync", giftsHandler.SyncTelegramGifts)
+	internal.Post("/nft/sync", giftsHandler.SyncNFTGifts)
 
 	// Admin routes — gateway forwards X-Admin-Role after JWT validation
 	admin := api.Group("/admin", catmw.RequireAdmin(catmw.RoleViewer))
@@ -115,6 +125,7 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
+	syncCancel()
 	log.Info("shutting down catalog-service")
 	_ = app.Shutdown()
 }

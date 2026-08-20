@@ -88,10 +88,33 @@ services:
       - markettg
 
   migrate:
-    image: migrate/migrate:v4.18.1
+    image: postgres:16-alpine
     volumes:
       - ./migrations:/migrations
-    command: ["-path", "/migrations", "-database", "postgres://markettg:markettg@postgres:5432/markettg?sslmode=disable", "up"]
+    environment:
+      PGPASSWORD: markettg
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        psql -h postgres -U markettg -d markettg -v ON_ERROR_STOP=1 -c "CREATE TABLE IF NOT EXISTS public.schema_migrations (filename TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW());"
+        if psql -h postgres -U markettg -d markettg -tAc "SELECT 1 FROM information_schema.schemata WHERE schema_name='users'" | grep -q 1; then
+          if [ "$$(psql -h postgres -U markettg -d markettg -tAc "SELECT COUNT(*) FROM public.schema_migrations")" = "0" ]; then
+            for name in 000001_init_users.up.sql 000002_init_catalog.up.sql 000003_init_orders.up.sql 000004_init_payments.up.sql 000005_init_delivery.up.sql 000006_init_notifications.up.sql 000007_seed_data.up.sql 000008_seed_admin.up.sql; do
+              psql -h postgres -U markettg -d markettg -c "INSERT INTO public.schema_migrations (filename) VALUES ('$$name') ON CONFLICT DO NOTHING"
+            done
+          fi
+        fi
+        for f in /migrations/*_*.up.sql; do
+          name=$$(basename "$$f")
+          if psql -h postgres -U markettg -d markettg -tAc "SELECT 1 FROM public.schema_migrations WHERE filename='$$name'" | grep -q 1; then
+            echo "skip $$name"
+            continue
+          fi
+          echo "applying $$f"
+          psql -h postgres -U markettg -d markettg -v ON_ERROR_STOP=1 -f "$$f"
+          psql -h postgres -U markettg -d markettg -c "INSERT INTO public.schema_migrations (filename) VALUES ('$$name')"
+        done
     depends_on:
       postgres:
         condition: service_healthy
@@ -115,6 +138,12 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret}
       ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:-dev-admin-jwt-secret}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      USER_SERVICE_URL: http://user-service:8081
+      CATALOG_SERVICE_URL: http://catalog-service:8082
+      ORDER_SERVICE_URL: http://order-service:8083
+      PAYMENT_SERVICE_URL: http://payment-service:8084
+      DELIVERY_SERVICE_URL: http://delivery-service:8085
+      NOTIFICATION_SERVICE_URL: http://notification-service:8086
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
       interval: 10s
@@ -132,6 +161,8 @@ services:
       <<: *common-env
       PORT: "8081"
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
+      BOT_INTERNAL_SECRET: ${BOT_INTERNAL_SECRET:-bot-secret}
       ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:-dev-admin-jwt-secret}
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8081/health"]
@@ -158,6 +189,9 @@ services:
     environment:
       <<: *common-env
       PORT: "8082"
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      BOT_INTERNAL_SECRET: ${BOT_INTERNAL_SECRET:-bot-secret}
+      STAR_KOPECKS_RATE: ${STAR_KOPECKS_RATE:-180}
       S3_ENDPOINT: minio:9000
       S3_ACCESS_KEY: minioadmin
       S3_SECRET_KEY: minioadmin
@@ -182,6 +216,7 @@ services:
       PORT: "8083"
       CATALOG_SERVICE_URL: http://catalog-service:8082
       USER_SERVICE_URL: http://user-service:8081
+      BOT_INTERNAL_SECRET: ${BOT_INTERNAL_SECRET:-bot-secret}
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8083/health"]
       interval: 10s
@@ -253,11 +288,17 @@ services:
     depends_on:
       gateway:
         condition: service_healthy
+      catalog-service:
+        condition: service_healthy
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       GATEWAY_URL: http://gateway:8080
       BOT_INTERNAL_SECRET: ${BOT_INTERNAL_SECRET:-bot-secret}
       MINI_APP_URL: ${MINI_APP_URL:-http://localhost:3000}
+      CATALOG_SERVICE_URL: http://catalog-service:8082
+      GIFTS_SYNC_INTERVAL_SEC: ${GIFTS_SYNC_INTERVAL_SEC:-600}
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID:-0}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH:-}
     ports:
       - "8090:8090"
     networks:
@@ -272,7 +313,9 @@ services:
       gateway:
         condition: service_healthy
     environment:
+      API_URL: http://gateway:8080
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
+      NEXT_PUBLIC_SUPPORT_URL: ${NEXT_PUBLIC_SUPPORT_URL:-https://t.me/markettg_support}
     ports:
       - "3000:3000"
     networks:

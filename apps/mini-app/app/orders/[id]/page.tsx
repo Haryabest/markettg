@@ -2,62 +2,106 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Badge } from "@astryxdesign/core/Badge";
+import { Button } from "@astryxdesign/core/Button";
+import { Card } from "@astryxdesign/core/Card";
+import { Heading } from "@astryxdesign/core/Heading";
+import { Item } from "@astryxdesign/core/Item";
+import { List, ListItem } from "@astryxdesign/core/List";
+import { Spinner } from "@astryxdesign/core/Spinner";
+import { StatusDot } from "@astryxdesign/core/StatusDot";
+import { Text } from "@astryxdesign/core/Text";
+import { VStack } from "@astryxdesign/core/VStack";
 import { api } from "@/lib/api";
-import { formatPrice } from "@/lib/utils";
+import { formatDate, formatPrice } from "@/lib/utils";
+import { AppIcon, productTypeIcon } from "@/components/icons";
+import { Clock, Wallet } from "lucide-react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const STATUS_LABELS: Record<string, string> = {
+  CREATED: "Создан",
+  PAYMENT_PENDING: "Ожидает оплаты",
+  PAID: "Оплачен, готовим доставку",
+  DELIVERING: "Доставляем на аккаунт",
+  COMPLETED: "Доставлен",
+  CANCELLED: "Отменён",
+};
 
 export default function OrderDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [liveStatus, setLiveStatus] = useState<string | null>(null);
 
-  const { data: order, refetch } = useQuery({
+  const { data: order, isError } = useQuery({
     queryKey: ["order", id],
     queryFn: () => api.getOrder(id),
     enabled: !!id,
-    refetchInterval: 10000,
+    refetchInterval: 10_000,
   });
 
-  useEffect(() => {
-    if (!id) return;
-    const wsUrl = API_URL.replace("http", "ws") + `/api/v1/ws/orders/${id}`;
-    let ws: WebSocket;
-    try {
-      ws = new WebSocket(wsUrl);
-      ws.onmessage = (e) => {
-        const data = JSON.parse(e.data);
-        if (data.status) setLiveStatus(data.status);
-      };
-      ws.onclose = () => setTimeout(() => refetch(), 3000);
-    } catch {
-      // fallback polling via refetchInterval
-    }
-    return () => ws?.close();
-  }, [id, refetch]);
-
-  if (!order) return <p>Загрузка...</p>;
-
-  const status = liveStatus || order.status;
+  if (!order && !isError) return <Spinner label="Загрузка заказа" />;
+  if (!order) {
+    return (
+      <VStack gap={4}>
+        <Heading level={1}>Заказ</Heading>
+        <Text type="body" color="secondary" display="block">
+          Не удалось открыть заказ. Возможно, нужна авторизация через Telegram.
+        </Text>
+        <Button label="К заказам" href="/orders" variant="primary" />
+      </VStack>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Заказ #{order.id.slice(0, 8)}</h1>
-      <div className="rounded-2xl bg-zinc-50 p-4">
-        <p className="text-sm text-zinc-500">Статус</p>
-        <p className="text-lg font-semibold">{status}</p>
-      </div>
-      <p className="text-xl font-bold">{formatPrice(order.total_kopecks)}</p>
+    <VStack gap={5}>
+      <VStack gap={1}>
+        <Heading level={1}>Заказ #{order.id.slice(0, 8)}</Heading>
+        <Text type="supporting" color="secondary" display="block">
+          Создан {formatDate(order.created_at)}. Статус обновляется автоматически.
+        </Text>
+      </VStack>
+      <Card padding={4}>
+        <VStack gap={3}>
+          <Item
+            startContent={<StatusDot variant="accent" label={order.status} isPulsing={order.status !== "COMPLETED" && order.status !== "CANCELLED"} />}
+            label={STATUS_LABELS[order.status] || order.status}
+            description="Stars и Premium обычно приходят в течение минуты после оплаты"
+          />
+          <Text type="large" weight="semibold" display="block">
+            {formatPrice(order.total_kopecks)}
+          </Text>
+          {order.discount_kopecks ? (
+            <Badge variant="green" label={`Скидка ${formatPrice(order.discount_kopecks)}`} />
+          ) : null}
+        </VStack>
+      </Card>
       {order.items && (
-        <ul className="space-y-2">
+        <List hasDividers header="Состав заказа">
           {order.items.map((item) => (
-            <li key={item.id} className="flex justify-between rounded-xl bg-zinc-50 p-3 text-sm">
-              <span>{item.name} × {item.quantity}</span>
-              <span>{formatPrice(item.price_kopecks * item.quantity)}</span>
-            </li>
+            <ListItem
+              key={item.id}
+              startContent={<AppIcon icon={productTypeIcon(item.product_type)} />}
+              label={item.name}
+              description={`${item.product_type} · ${item.quantity} шт. × ${formatPrice(item.price_kopecks)}`}
+              endContent={
+                <Text type="body" weight="medium">
+                  {formatPrice(item.price_kopecks * item.quantity)}
+                </Text>
+              }
+            />
           ))}
-        </ul>
+        </List>
       )}
-    </div>
+      <List hasDividers header="Детали">
+        <ListItem
+          startContent={<AppIcon icon={Clock} size={16} />}
+          label="Оформлен"
+          description={formatDate(order.created_at)}
+        />
+        <ListItem
+          startContent={<AppIcon icon={Wallet} size={16} />}
+          label="К оплате"
+          description={order.discount_kopecks ? "Уже с учётом промокода" : "Без скидки"}
+          endContent={<Text type="body" weight="medium">{formatPrice(order.total_kopecks)}</Text>}
+        />
+      </List>
+    </VStack>
   );
 }

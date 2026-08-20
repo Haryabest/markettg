@@ -1,0 +1,1 @@
+-- Irreversible without knowing which products were manually deactivated.

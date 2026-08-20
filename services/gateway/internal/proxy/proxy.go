@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/markettg/markettg/packages/go-shared/pkg/middleware"
@@ -35,7 +36,11 @@ func Forward(baseURL string) fiber.Handler {
 		}
 
 		c.Request().Header.VisitAll(func(key, value []byte) {
-			req.Header.Set(string(key), string(value))
+			k := string(key)
+			if k == "X-User-Id" {
+				return
+			}
+			req.Header.Set(k, string(value))
 		})
 
 		if rid := middleware.GetRequestID(c); rid != "" {
@@ -58,7 +63,7 @@ func Forward(baseURL string) fiber.Handler {
 			req.Header.Set("X-Telegram-User-Id", botUserID)
 		}
 
-		client := &http.Client{}
+		client := &http.Client{Timeout: 15 * time.Second}
 		resp, err := client.Do(req)
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadGateway, "service unavailable")

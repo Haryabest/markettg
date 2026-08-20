@@ -15,6 +15,7 @@ import (
 	"github.com/markettg/markettg/packages/go-shared/pkg/logger"
 	"github.com/markettg/markettg/packages/go-shared/pkg/middleware"
 	"github.com/markettg/markettg/services/user-service/internal/handler"
+	usermw "github.com/markettg/markettg/services/user-service/internal/middleware"
 	"github.com/markettg/markettg/services/user-service/internal/repository"
 	"github.com/markettg/markettg/services/user-service/internal/service"
 	"go.uber.org/zap"
@@ -48,12 +49,18 @@ func main() {
 	api.Post("/auth/telegram", h.AuthTelegram)
 	api.Post("/admin/auth/login", h.AdminLogin)
 	api.Post("/admin/auth/refresh", h.AdminRefresh)
-	api.Get("/me", h.GetMe)
-	api.Get("/favorites", h.ListFavorites)
-	api.Post("/favorites/:productId", h.AddFavorite)
-	api.Delete("/favorites/:productId", h.RemoveFavorite)
+	api.Get("/me", usermw.RequireTelegramID(), h.GetMe)
+	api.Get("/favorites", usermw.RequireTelegramID(), h.ListFavorites)
+	api.Post("/favorites/:productId", usermw.RequireTelegramID(), h.AddFavorite)
+	api.Delete("/favorites/:productId", usermw.RequireTelegramID(), h.RemoveFavorite)
+	api.Get("/referrals/me", usermw.RequireTelegramID(), h.GetReferrals)
 
-	api.Get("/internal/users/telegram/:telegramId", h.ResolveByTelegramID)
+	internalSecret := config.GetEnv("BOT_INTERNAL_SECRET", "bot-secret")
+	internal := api.Group("/internal", usermw.InternalAuth(internalSecret))
+	internal.Get("/users/telegram/:telegramId", h.ResolveByTelegramID)
+	internal.Post("/referrals/validate-promo", h.InternalValidateReferralPromo)
+	internal.Post("/referrals/mark-promo-used", h.InternalMarkReferralPromoUsed)
+	internal.Post("/referrals/order-completed", h.InternalCompleteReferralOrder)
 
 	// Admin
 	admin := api.Group("/admin")
