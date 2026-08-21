@@ -10,26 +10,37 @@ if (-not (Test-Path $fxtunnel)) {
   throw "fxtunnel.exe not found at $fxtunnel"
 }
 
-$log = Join-Path $env:TEMP "markettg-fxtunnel.log"
-if (Test-Path $log) { Remove-Item $log -Force }
+$logOut = Join-Path $env:TEMP "markettg-fxtunnel.out.log"
+$logErr = Join-Path $env:TEMP "markettg-fxtunnel.err.log"
+foreach ($path in @($logOut, $logErr)) {
+  if (Test-Path $path) { Remove-Item $path -Force }
+}
 
-$tunnel = Start-Process -FilePath $fxtunnel -ArgumentList @("http", "$Port", "--domain", $Domain) -RedirectStandardOutput $log -RedirectStandardError $log -PassThru -NoNewWindow
-$url = $null
-for ($i = 0; $i -lt 40; $i++) {
-  Start-Sleep -Seconds 1
-  if (Test-Path $log) {
-    $text = Get-Content $log -Raw -ErrorAction SilentlyContinue
-    if ($text -match "https://[a-zA-Z0-9.-]+\.fxtun\.dev") {
-      $url = $Matches[0]
-      break
+function Get-FxTunnelLogText {
+  $parts = @()
+  foreach ($path in @($logOut, $logErr)) {
+    if (Test-Path $path) {
+      $parts += Get-Content $path -Raw -ErrorAction SilentlyContinue
     }
+  }
+  return ($parts -join "`n")
+}
+
+$tunnel = Start-Process -FilePath $fxtunnel -ArgumentList @("http", "$Port", "--domain", $Domain) `
+  -RedirectStandardOutput $logOut -RedirectStandardError $logErr -PassThru -NoNewWindow
+$url = $null
+for ($i = 0; $i -lt 120; $i++) {
+  Start-Sleep -Seconds 1
+  $text = Get-FxTunnelLogText
+  if ($text -match "https://[a-zA-Z0-9.-]+\.fxtun\.dev") {
+    $url = $Matches[0]
+    break
   }
   if ($tunnel.HasExited) { break }
 }
 
 if (-not $url) {
-  $fallback = Get-Content $log -Raw -ErrorAction SilentlyContinue
-  throw "fxTunnel did not return a URL.`n$fallback"
+  throw "fxTunnel did not return a URL.`n$(Get-FxTunnelLogText)"
 }
 
 $envFile = Join-Path $PSScriptRoot "..\.env"
