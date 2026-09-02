@@ -29,7 +29,7 @@ func NewGiftSyncer(
 	h *handlers.GiftsHandler,
 	log *zap.Logger,
 ) *GiftSyncer {
-	intervalSec, _ := config.GetEnvInt("GIFTS_SYNC_INTERVAL_SEC", 600)
+	intervalSec := config.GetEnvInt("GIFTS_SYNC_INTERVAL_SEC", 600)
 	if intervalSec < 60 {
 		intervalSec = 60
 	}
@@ -111,7 +111,7 @@ func (s *GiftSyncer) syncOnce(ctx context.Context) {
 	}
 
 	rate := int64(config.GetEnvInt("STAR_KOPECKS_RATE", 180))
-	result, err := s.repo.SyncTelegramGifts(ctx, inputs, imageKeys, rate)
+	result, err := s.repo.SyncTelegramGifts(ctx, inputs, imageKeys, map[string]string{}, rate)
 	if err != nil {
 		s.log.Warn("telegram gifts sync failed", zap.Error(err))
 		return

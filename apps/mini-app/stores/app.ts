@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { api, type Cart, type User } from "@/lib/api";
+import { mapTelegramUser, parseUserFromInitData } from "@/lib/telegram";
 import { notifyError } from "@/stores/banners";
 
 const GUEST_CART_KEY = "markettg-cart-guest";
@@ -48,23 +49,37 @@ export function bindCartToUser(telegramId?: number | null) {
 type AuthState = {
   initData: string;
   user: User | null;
+  telegramUser: User | null;
   isReady: boolean;
   setInitData: (data: string) => void;
+  setTelegramUser: (user: {
+    id: number;
+    first_name?: string;
+    last_name?: string;
+    username?: string;
+    photo_url?: string;
+  }) => void;
   authenticate: () => Promise<void>;
+  displayUser: () => User | null;
 };
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   initData: "",
   user: null,
+  telegramUser: null,
   isReady: false,
   setInitData: (data) => {
     api.setInitData(data);
     set({ initData: data });
   },
+  setTelegramUser: (user) => {
+    set({ telegramUser: mapTelegramUser(user) });
+  },
+  displayUser: () => get().user ?? get().telegramUser,
   authenticate: async () => {
-    const { initData } = get();
+    const { initData, telegramUser } = get();
     if (!initData) {
-      bindCartToUser(null);
+      bindCartToUser(telegramUser?.telegram_id ?? null);
       set({ isReady: true });
       return;
     }
@@ -73,7 +88,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       bindCartToUser(res.user.telegram_id);
       set({ user: res.user, isReady: true });
     } catch {
-      bindCartToUser(null);
+      const parsed = parseUserFromInitData(initData);
+      const fallback = telegramUser ?? (parsed ? mapTelegramUser(parsed) : null);
+      if (fallback) set({ telegramUser: fallback });
+      bindCartToUser(fallback?.telegram_id ?? null);
       set({ isReady: true });
     }
   },

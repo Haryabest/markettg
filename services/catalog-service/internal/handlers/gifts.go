@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/markettg/markettg/packages/go-shared/pkg/httputil"
@@ -18,28 +19,35 @@ func (h *GiftsHandler) SyncTelegramGifts(c *fiber.Ctx) error {
 
 	ctx := c.Context()
 	imageKeys := make(map[string]string)
+	stickerKeys := make(map[string]string)
 
 	for _, gift := range req.Gifts {
 		existing, _ := h.repo.FindTelegramGiftImageKey(ctx, gift.TelegramGiftID)
 		if existing != nil && *existing != "" {
 			imageKeys[gift.TelegramGiftID] = *existing
-			continue
+		} else {
+			key, err := h.StoreGiftImage(
+				ctx,
+				gift.TelegramGiftID,
+				gift.ImageBase64,
+				gift.StickerThumbFileID,
+				gift.StickerFileID,
+				"gifts/telegram",
+			)
+			if err == nil {
+				imageKeys[gift.TelegramGiftID] = key
+			}
 		}
 
-		key, err := h.StoreGiftImage(
-			ctx,
-			gift.TelegramGiftID,
-			gift.ImageBase64,
-			gift.StickerThumbFileID,
-			gift.StickerFileID,
-			"gifts/telegram",
-		)
-		if err == nil {
-			imageKeys[gift.TelegramGiftID] = key
+		if gift.StickerBase64 != nil && strings.TrimSpace(*gift.StickerBase64) != "" {
+			key, err := h.StoreGiftSticker(ctx, gift.TelegramGiftID, gift.StickerBase64, "gifts/telegram")
+			if err == nil {
+				stickerKeys[gift.TelegramGiftID] = key
+			}
 		}
 	}
 
-	result, err := h.repo.SyncTelegramGifts(ctx, req.Gifts, imageKeys, h.starRate)
+	result, err := h.repo.SyncTelegramGifts(ctx, req.Gifts, imageKeys, stickerKeys, h.starRate)
 	if err != nil {
 		return err
 	}

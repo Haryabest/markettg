@@ -129,6 +129,28 @@ func (r *Repository) ListAll(ctx context.Context, limit, offset int) ([]Delivery
 	return jobs, nil
 }
 
+func (r *Repository) ListByOrderID(ctx context.Context, orderID uuid.UUID) ([]DeliveryJob, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, order_id, order_item_id, user_id, telegram_id, handler_type, delivery_config,
+		       status::text, attempts, max_attempts, last_error, completed_at, created_at
+		FROM delivery.delivery_jobs WHERE order_id = $1 ORDER BY created_at`, orderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var jobs []DeliveryJob
+	for rows.Next() {
+		var j DeliveryJob
+		if err := rows.Scan(&j.ID, &j.OrderID, &j.OrderItemID, &j.UserID, &j.TelegramID,
+			&j.HandlerType, &j.DeliveryConfig, &j.Status, &j.Attempts, &j.MaxAttempts,
+			&j.LastError, &j.CompletedAt, &j.CreatedAt); err != nil {
+			return nil, err
+		}
+		jobs = append(jobs, j)
+	}
+	return jobs, nil
+}
+
 func (r *Repository) GetJob(ctx context.Context, id uuid.UUID) (*DeliveryJob, error) {
 	var j DeliveryJob
 	err := r.pool.QueryRow(ctx, `

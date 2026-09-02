@@ -9,13 +9,19 @@ import { AppIcon } from "@/components/icons";
 import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
 import { notifyError, notifySuccess } from "@/stores/banners";
+import { useAuthStore } from "@/stores/app";
 import { Copy, Gift, Users } from "lucide-react";
 
 export default function ReferralPage() {
-  const { data, isLoading, isError } = useQuery({
+  const initData = useAuthStore((s) => s.initData);
+  const isReady = useAuthStore((s) => s.isReady);
+  const user = useAuthStore((s) => s.user ?? s.telegramUser);
+
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["referrals"],
     queryFn: () => api.getReferrals(),
-    retry: false,
+    enabled: isReady && Boolean(initData),
+    retry: 1,
   });
 
   const copyLink = async () => {
@@ -31,6 +37,9 @@ export default function ReferralPage() {
     }
   };
 
+  const needsTelegram = isReady && !initData;
+  const waitingAuth = !isReady || (Boolean(initData) && isLoading);
+
   return (
     <VStack gap={5}>
       <VStack gap={1}>
@@ -38,6 +47,11 @@ export default function ReferralPage() {
         <Text type="supporting" color="secondary" display="block">
           Делитесь ссылкой — вы оба получите бонусы после первой покупки друга.
         </Text>
+        {user ? (
+          <Text type="supporting" color="secondary" display="block">
+            Аккаунт: {user.first_name || user.username || user.telegram_id}
+          </Text>
+        ) : null}
       </VStack>
 
       <VStack gap={2}>
@@ -59,14 +73,21 @@ export default function ReferralPage() {
         />
       </VStack>
 
-      {isLoading ? (
+      {waitingAuth ? (
         <Text type="supporting" color="secondary" display="block">
           Загрузка статистики…
         </Text>
-      ) : isError || !data ? (
+      ) : needsTelegram ? (
         <Text type="supporting" color="secondary" display="block">
-          Откройте магазин из Telegram, чтобы активировать реферальную программу.
+          Откройте магазин из Telegram (кнопка «Открыть магазин» в боте), а не в обычном браузере.
         </Text>
+      ) : isError || !data ? (
+        <VStack gap={2}>
+          <Text type="supporting" color="secondary" display="block">
+            Не удалось загрузить реферальную ссылку. Проверьте интернет и попробуйте снова.
+          </Text>
+          <FilledButton label="Повторить" size="md" fullWidth onClick={() => refetch()} />
+        </VStack>
       ) : (
         <VStack gap={3}>
           <VStack gap={1}>

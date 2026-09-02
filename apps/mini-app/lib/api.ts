@@ -182,6 +182,8 @@ export type DeliveryConfig = {
   nft_slug?: string;
   gift_num?: number;
   base_gift_id?: number;
+  title?: string;
+  sticker_url?: string;
 };
 
 export type Product = {

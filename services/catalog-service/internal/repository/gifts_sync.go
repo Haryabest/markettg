@@ -15,11 +15,13 @@ var slugSanitizer = regexp.MustCompile(`[^a-zA-Z0-9-]+`)
 
 type TelegramGiftSyncInput struct {
 	TelegramGiftID     string  `json:"telegram_gift_id"`
+	Title              *string `json:"title"`
 	StarCount          int     `json:"star_count"`
 	Emoji              *string `json:"emoji"`
 	StickerThumbFileID *string `json:"sticker_thumb_file_id"`
 	StickerFileID      *string `json:"sticker_file_id"`
 	ImageBase64        *string `json:"image_base64"`
+	StickerBase64      *string `json:"sticker_base64"`
 	TotalCount         *int    `json:"total_count"`
 	RemainingCount     *int    `json:"remaining_count"`
 }
@@ -51,9 +53,12 @@ func slugForTelegramGift(giftID string) string {
 	return SlugForTelegramGift(giftID)
 }
 
-func giftName(emoji *string, giftID string) string {
+func giftName(title, emoji *string, giftID string) string {
+	if title != nil && strings.TrimSpace(*title) != "" {
+		return strings.TrimSpace(*title)
+	}
 	if emoji != nil && strings.TrimSpace(*emoji) != "" {
-		return fmt.Sprintf("Подарок %s", strings.TrimSpace(*emoji))
+		return strings.TrimSpace(*emoji)
 	}
 	shortID := giftID
 	if len(shortID) > 8 {
@@ -82,6 +87,7 @@ func (r *CatalogRepository) SyncTelegramGifts(
 	ctx context.Context,
 	inputs []TelegramGiftSyncInput,
 	imageKeys map[string]string,
+	stickerKeys map[string]string,
 	starKopecksRate int64,
 ) (*GiftSyncResult, error) {
 	if len(inputs) == 0 {
@@ -111,16 +117,13 @@ func (r *CatalogRepository) SyncTelegramGifts(
 		}
 
 		active := true
-		if in.RemainingCount != nil && *in.RemainingCount <= 0 {
-			active = false
-		}
 
 		slug := slugForTelegramGift(in.TelegramGiftID)
-		name := giftName(in.Emoji, in.TelegramGiftID)
+		name := giftName(in.Title, in.Emoji, in.TelegramGiftID)
 		desc := giftDescription(in)
 		price := int64(in.StarCount) * starKopecksRate
 
-		deliveryCfg, _ := json.Marshal(map[string]interface{}{
+		delivery := map[string]interface{}{
 			"type":              "GIFT",
 			"gift_id":           in.TelegramGiftID,
 			"telegram_gift_id":  in.TelegramGiftID,
@@ -128,7 +131,14 @@ func (r *CatalogRepository) SyncTelegramGifts(
 			"total_count":       in.TotalCount,
 			"remaining_count":   in.RemainingCount,
 			"telegram_synced":   true,
-		})
+		}
+		if in.Title != nil && strings.TrimSpace(*in.Title) != "" {
+			delivery["title"] = strings.TrimSpace(*in.Title)
+		}
+		if stickerKey, ok := stickerKeys[in.TelegramGiftID]; ok && stickerKey != "" {
+			delivery["sticker_key"] = stickerKey
+		}
+		deliveryCfg, _ := json.Marshal(delivery)
 
 		var imageKey *string
 		if key, ok := imageKeys[in.TelegramGiftID]; ok && key != "" {

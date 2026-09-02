@@ -8,21 +8,23 @@ import (
 	"github.com/markettg/markettg/packages/go-shared/pkg/apperrors"
 	"github.com/markettg/markettg/services/order-service/internal/cart"
 	"github.com/markettg/markettg/services/order-service/internal/catalog"
+	"github.com/markettg/markettg/services/order-service/internal/delivery"
 	"github.com/markettg/markettg/services/order-service/internal/repository"
 	"github.com/markettg/markettg/services/order-service/internal/user"
 	"github.com/redis/go-redis/v9"
 )
 
 type Service struct {
-	repo    *repository.Repository
-	cart    *cart.Store
-	catalog *catalog.Client
-	redis   *redis.Client
-	users   *user.Client
+	repo     *repository.Repository
+	cart     *cart.Store
+	catalog  *catalog.Client
+	redis    *redis.Client
+	users    *user.Client
+	delivery *delivery.Client
 }
 
-func New(repo *repository.Repository, cartStore *cart.Store, catalogClient *catalog.Client, redis *redis.Client, users *user.Client) *Service {
-	return &Service{repo: repo, cart: cartStore, catalog: catalogClient, redis: redis, users: users}
+func New(repo *repository.Repository, cartStore *cart.Store, catalogClient *catalog.Client, redis *redis.Client, users *user.Client, deliveryClient *delivery.Client) *Service {
+	return &Service{repo: repo, cart: cartStore, catalog: catalogClient, redis: redis, users: users, delivery: deliveryClient}
 }
 
 func (s *Service) GetCart(ctx context.Context, userID string) (*cart.Cart, error) {
@@ -185,8 +187,81 @@ func (s *Service) GetOrderInternal(ctx context.Context, orderID uuid.UUID) (*rep
 	return order, nil
 }
 
-func (s *Service) AdminListOrders(ctx context.Context, limit, offset int) ([]repository.Order, error) {
-	return s.repo.ListAllOrders(ctx, limit, offset)
+type AdminOrder struct {
+	repository.Order
+	TelegramID   int64  `json:"telegram_id,omitempty"`
+	CustomerName string `json:"customer_name,omitempty"`
+}
+
+func (s *Service) AdminListOrders(ctx context.Context, limit, offset int) ([]AdminOrder, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	orders, err := s.repo.ListAllOrdersWithItems(ctx, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]AdminOrder, 0, len(orders))
+	for _, order := range orders {
+		adminOrder := AdminOrder{Order: order}
+		if s.users != nil {
+			if u, err := s.users.GetByID(ctx, order.UserID); err == nil && u != nil {
+				adminOrder.TelegramID = u.TelegramID
+				adminOrder.CustomerName = customerName(u)
+			}
+		}
+		result = append(result, adminOrder)
+	}
+	return result, nil
+}
+
+func (s *Service) AdminGetOrder(ctx context.Context, orderID uuid.UUID) (*AdminOrder, error) {
+	order, err := s.repo.GetOrder(ctx, orderID)
+	if err != nil || order == nil {
+		return nil, apperrors.ErrOrderNotFound
+	}
+	adminOrder := &AdminOrder{Order: *order}
+	if s.users != nil {
+		if u, err := s.users.GetByID(ctx, order.UserID); err == nil && u != nil {
+			adminOrder.TelegramID = u.TelegramID
+			adminOrder.CustomerName = customerName(u)
+		}
+	}
+	return adminOrder, nil
+}
+
+func (s *Service) AdminConfirmShipment(ctx context.Context, orderID uuid.UUID) (*repository.Order, error) {
+	order, err := s.repo.GetOrder(ctx, orderID)
+	if err != nil || order == nil {
+		return nil, apperrors.ErrOrderNotFound
+	}
+	switch order.Status {
+	case "PAID", "DELIVERY_PENDING", "DELIVERING":
+	default:
+		return nil, apperrors.New("INVALID_STATUS", "Заказ нельзя подтвердить в текущем статусе", 400)
+	}
+	if err := s.repo.UpdateStatus(ctx, orderID, "COMPLETED"); err != nil {
+		return nil, apperrors.ErrInternal
+	}
+	if s.delivery != nil {
+		_ = s.delivery.ConfirmOrderDeliveries(ctx, orderID)
+	}
+	order.Status = "COMPLETED"
+	return order, nil
+}
+
+func customerName(u *user.User) string {
+	if u.FirstName != nil && *u.FirstName != "" {
+		name := *u.FirstName
+		if u.LastName != nil && *u.LastName != "" {
+			name += " " + *u.LastName
+		}
+		return name
+	}
+	if u.Username != nil && *u.Username != "" {
+		return "@" + *u.Username
+	}
+	return ""
 }
 
 func (s *Service) ListPromoCodes(ctx context.Context) ([]repository.PromoCode, error) {

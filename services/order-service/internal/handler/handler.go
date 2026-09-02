@@ -209,6 +209,30 @@ func (h *Handler) AdminListOrders(c *fiber.Ctx) error {
 	return httputil.JSON(c, fiber.StatusOK, fiber.Map{"orders": orders})
 }
 
+func (h *Handler) AdminGetOrder(c *fiber.Ctx) error {
+	orderID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return fiber.ErrBadRequest
+	}
+	order, err := h.svc.AdminGetOrder(c.Context(), orderID)
+	if err != nil {
+		return err
+	}
+	return httputil.JSON(c, fiber.StatusOK, order)
+}
+
+func (h *Handler) AdminConfirmShipment(c *fiber.Ctx) error {
+	orderID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return fiber.ErrBadRequest
+	}
+	order, err := h.svc.AdminConfirmShipment(c.Context(), orderID)
+	if err != nil {
+		return err
+	}
+	return httputil.JSON(c, fiber.StatusOK, order)
+}
+
 func (h *Handler) AdminListPromoCodes(c *fiber.Ctx) error {
 	codes, err := h.svc.ListPromoCodes(c.Context())
 	if err != nil {

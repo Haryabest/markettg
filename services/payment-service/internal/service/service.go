@@ -103,6 +103,17 @@ func (s *Service) CreatePayment(ctx context.Context, userID uuid.UUID, telegramI
 	}, nil
 }
 
+func (s *Service) markOrderPaid(ctx context.Context, paymentID uuid.UUID, event *provider.WebhookEvent) error {
+	orderID, err := s.repo.MarkPaid(ctx, paymentID, event.ProviderPaymentID, event.ProviderEventID, event.RawPayload)
+	if err != nil {
+		return err
+	}
+	if orderID != uuid.Nil {
+		_ = s.order.UpdateStatus(ctx, orderID, "PAID")
+	}
+	return nil
+}
+
 func (s *Service) HandleWebhook(ctx context.Context, method string, headers map[string]string, body []byte) error {
 	prov, ok := s.providers[method]
 	if !ok {
@@ -123,7 +134,7 @@ func (s *Service) HandleWebhook(ctx context.Context, method string, headers map[
 		paymentID, _ = uuid.Parse(event.ProviderPaymentID[5:])
 	}
 
-	return s.repo.MarkPaid(ctx, paymentID, event.ProviderPaymentID, event.ProviderEventID, event.RawPayload)
+	return s.markOrderPaid(ctx, paymentID, event)
 }
 
 func (s *Service) ListPayments(ctx context.Context, limit, offset int) ([]repository.Payment, error) {

@@ -6,6 +6,8 @@ TELEGRAM_BOT_TOKEN=8648803947:AAFnKhb5_dwV0X9gp8O_pNynfq5vacYX-2E
 # Для NFT (перепродажа) — получить на https://my.telegram.org
 TELEGRAM_API_ID=
 TELEGRAM_API_HASH=
+# User session для NFT resale (python scripts/telegram-session.py)
+TELEGRAM_SESSION=
 
 BOT_INTERNAL_SECRET=bot-secret
 STAR_KOPECKS_RATE=180

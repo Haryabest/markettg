@@ -3,6 +3,7 @@ package repository
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"path"
 	"strings"
@@ -103,6 +104,25 @@ func ApplyImageURL(p *Product, s3 *S3Repository) {
 	if p.ImageKey != nil && *p.ImageKey != "" {
 		url := s3.PublicURL(*p.ImageKey)
 		p.ImageURL = &url
+	}
+	ApplyGiftStickerURL(p, s3)
+}
+
+func ApplyGiftStickerURL(p *Product, s3 *S3Repository) {
+	if len(p.DeliveryConfig) == 0 || s3 == nil {
+		return
+	}
+	var cfg map[string]interface{}
+	if err := json.Unmarshal(p.DeliveryConfig, &cfg); err != nil {
+		return
+	}
+	key, _ := cfg["sticker_key"].(string)
+	if strings.TrimSpace(key) == "" {
+		return
+	}
+	cfg["sticker_url"] = s3.PublicURL(key)
+	if encoded, err := json.Marshal(cfg); err == nil {
+		p.DeliveryConfig = encoded
 	}
 }
 

@@ -19,9 +19,12 @@ import (
 	"github.com/markettg/markettg/packages/go-shared/pkg/middleware"
 	"github.com/markettg/markettg/packages/go-shared/pkg/redisutil"
 	"github.com/markettg/markettg/packages/go-shared/pkg/stream"
+	delapi "github.com/markettg/markettg/services/delivery-service/internal/api"
 	delhandler "github.com/markettg/markettg/services/delivery-service/internal/handler"
+	"github.com/markettg/markettg/services/delivery-service/internal/order"
 	"github.com/markettg/markettg/services/delivery-service/internal/repository"
 	"github.com/markettg/markettg/services/delivery-service/internal/service"
+	"github.com/markettg/markettg/services/delivery-service/internal/userclient"
 	"go.uber.org/zap"
 )
 
@@ -40,12 +43,17 @@ func main() {
 	})
 
 	repo := repository.New(pool)
-	svc := service.New(repo, redisClient, log,
+	orderClient := order.NewClient(config.GetEnv("ORDER_SERVICE_URL", "http://order-service:8083"))
+	userClient := userclient.New(
+		config.GetEnv("USER_SERVICE_URL", "http://user-service:8081"),
+		config.GetEnv("BOT_INTERNAL_SECRET", "bot-secret"),
+	)
+	svc := service.New(repo, redisClient, log, orderClient, userClient,
 		delhandler.NewStarsDeliveryHandler(),
 		delhandler.NewPremiumDeliveryHandler(),
 		delhandler.NewGiftDeliveryHandler(),
 	)
-	h := delhandler.New(svc)
+	h := delapi.New(svc, config.GetEnv("BOT_INTERNAL_SECRET", "bot-secret"))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -84,7 +92,10 @@ func main() {
 	api := app.Group("/api/v1")
 	api.Get("/admin/deliveries", h.ListDeliveries)
 	api.Post("/admin/deliveries/:id/retry", h.RetryDelivery)
+	api.Post("/admin/deliveries/:id/confirm", h.ConfirmDelivery)
 	api.Post("/internal/deliveries", h.CreateJob)
+	internal := api.Group("/internal", h.RequireInternal)
+	internal.Post("/deliveries/orders/:orderId/confirm", h.InternalConfirmOrderDeliveries)
 
 	go func() {
 		addr := fmt.Sprintf(":%s", base.Port)

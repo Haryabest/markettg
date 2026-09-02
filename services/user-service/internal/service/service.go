@@ -42,6 +42,10 @@ func (s *Service) GetMe(ctx context.Context, telegramID int64) (*repository.User
 	return s.repo.GetByTelegramID(ctx, telegramID)
 }
 
+func (s *Service) GetUserByID(ctx context.Context, userID uuid.UUID) (*repository.User, error) {
+	return s.repo.GetByID(ctx, userID)
+}
+
 func (s *Service) ListFavorites(ctx context.Context, telegramID int64) ([]uuid.UUID, error) {
 	user, err := s.repo.GetByTelegramID(ctx, telegramID)
 	if err != nil {

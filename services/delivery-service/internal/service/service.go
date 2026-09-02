@@ -10,7 +10,9 @@ import (
 	"github.com/markettg/markettg/packages/go-shared/pkg/events"
 	"github.com/markettg/markettg/packages/go-shared/pkg/redisutil"
 	delhandler "github.com/markettg/markettg/services/delivery-service/internal/handler"
+	"github.com/markettg/markettg/services/delivery-service/internal/order"
 	"github.com/markettg/markettg/services/delivery-service/internal/repository"
+	"github.com/markettg/markettg/services/delivery-service/internal/userclient"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -19,15 +21,17 @@ type Service struct {
 	repo     *repository.Repository
 	redis    *redis.Client
 	handlers map[string]delhandler.DeliveryHandler
+	orders   *order.Client
+	users    *userclient.Client
 	log      *zap.Logger
 }
 
-func New(repo *repository.Repository, redis *redis.Client, log *zap.Logger, handlers ...delhandler.DeliveryHandler) *Service {
+func New(repo *repository.Repository, redis *redis.Client, log *zap.Logger, orderClient *order.Client, userClient *userclient.Client, handlers ...delhandler.DeliveryHandler) *Service {
 	m := make(map[string]delhandler.DeliveryHandler)
 	for _, h := range handlers {
 		m[h.Type()] = h
 	}
-	return &Service{repo: repo, redis: redis, handlers: m, log: log}
+	return &Service{repo: repo, redis: redis, handlers: m, orders: orderClient, users: userClient, log: log}
 }
 
 func (s *Service) ProcessPaymentSucceeded(ctx context.Context, eventID string, payload events.PaymentSucceededPayload) error {
@@ -44,7 +48,49 @@ func (s *Service) ProcessPaymentSucceeded(ctx context.Context, eventID string, p
 	}
 	defer lock.Release(ctx)
 
-	// Fetch order items from order service would happen here; for now create jobs from event
+	if s.orders == nil {
+		_ = s.repo.MarkEventProcessed(ctx, eventID)
+		return nil
+	}
+
+	orderID, err := uuid.Parse(payload.OrderID)
+	if err != nil {
+		return err
+	}
+	ord, err := s.orders.GetOrder(ctx, orderID)
+	if err != nil || ord == nil {
+		return fmt.Errorf("order not found: %s", payload.OrderID)
+	}
+
+	var telegramID int64
+	if s.users != nil {
+		if u, err := s.users.GetByID(ctx, ord.UserID); err == nil && u != nil {
+			telegramID = u.TelegramID
+		}
+	}
+
+	for _, item := range ord.Items {
+		handlerType := item.ProductType
+		if handlerType == "NFT" {
+			handlerType = "GIFT"
+		}
+		for q := 0; q < item.Quantity; q++ {
+			_, err := s.repo.CreateJob(ctx, repository.DeliveryJob{
+				OrderID:        ord.ID,
+				OrderItemID:    item.ID,
+				UserID:         ord.UserID,
+				TelegramID:     telegramID,
+				HandlerType:    handlerType,
+				DeliveryConfig: item.DeliveryConfig,
+				MaxAttempts:    5,
+			})
+			if err != nil {
+				s.log.Warn("failed to create delivery job", zap.String("order_id", ord.ID.String()), zap.Error(err))
+			}
+		}
+	}
+
+	_ = s.orders.UpdateStatus(ctx, orderID, "DELIVERY_PENDING")
 	_ = s.repo.MarkEventProcessed(ctx, eventID)
 	return nil
 }
@@ -144,4 +190,55 @@ func (s *Service) RetryDelivery(ctx context.Context, jobID uuid.UUID) error {
 	}
 	job.Status = "PENDING"
 	return s.DeliverJob(ctx, job)
+}
+
+func (s *Service) ConfirmDelivery(ctx context.Context, jobID uuid.UUID) (*repository.DeliveryJob, error) {
+	job, err := s.repo.GetJob(ctx, jobID)
+	if err != nil || job == nil {
+		return nil, fmt.Errorf("job not found")
+	}
+	if job.Status == "COMPLETED" {
+		return job, nil
+	}
+	if err := s.repo.MarkCompleted(ctx, jobID); err != nil {
+		return nil, err
+	}
+	job.Status = "COMPLETED"
+	now := time.Now()
+	job.CompletedAt = &now
+	s.maybeCompleteOrder(ctx, job.OrderID)
+	return job, nil
+}
+
+func (s *Service) ConfirmOrderDeliveries(ctx context.Context, orderID uuid.UUID) error {
+	jobs, err := s.repo.ListByOrderID(ctx, orderID)
+	if err != nil {
+		return err
+	}
+	for _, job := range jobs {
+		if job.Status != "COMPLETED" {
+			if err := s.repo.MarkCompleted(ctx, job.ID); err != nil {
+				return err
+			}
+		}
+	}
+	if s.orders != nil {
+		_ = s.orders.UpdateStatus(ctx, orderID, "COMPLETED")
+	}
+	return nil
+}
+
+func (s *Service) maybeCompleteOrder(ctx context.Context, orderID uuid.UUID) {
+	jobs, err := s.repo.ListByOrderID(ctx, orderID)
+	if err != nil || len(jobs) == 0 {
+		return
+	}
+	for _, job := range jobs {
+		if job.Status != "COMPLETED" {
+			return
+		}
+	}
+	if s.orders != nil {
+		_ = s.orders.UpdateStatus(ctx, orderID, "COMPLETED")
+	}
 }

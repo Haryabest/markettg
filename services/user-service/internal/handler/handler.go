@@ -109,6 +109,18 @@ func (h *Handler) ResolveByTelegramID(c *fiber.Ctx) error {
 	return httputil.JSON(c, fiber.StatusOK, user)
 }
 
+func (h *Handler) ResolveByUserID(c *fiber.Ctx) error {
+	userID, err := uuid.Parse(c.Params("userId"))
+	if err != nil {
+		return fiber.ErrBadRequest
+	}
+	user, err := h.svc.GetUserByID(c.Context(), userID)
+	if err != nil {
+		return err
+	}
+	return httputil.JSON(c, fiber.StatusOK, user)
+}
+
 func (h *Handler) AdminLogin(c *fiber.Ctx) error {
 	var req service.AdminLoginRequest
 	if err := c.BodyParser(&req); err != nil {

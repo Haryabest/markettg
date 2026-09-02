@@ -80,37 +80,43 @@ func (r *Repository) Create(ctx context.Context, p Payment) (*Payment, error) {
 	return &p, nil
 }
 
-func (r *Repository) MarkPaid(ctx context.Context, paymentID uuid.UUID, providerPaymentID string, eventID string, rawPayload []byte) error {
+func (r *Repository) MarkPaid(ctx context.Context, paymentID uuid.UUID, providerPaymentID string, eventID string, rawPayload []byte) (uuid.UUID, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return err
+		return uuid.Nil, err
 	}
 	defer tx.Rollback(ctx)
+
+	var orderID uuid.UUID
+	err = tx.QueryRow(ctx, `SELECT order_id FROM payments.payments WHERE id = $1`, paymentID).Scan(&orderID)
+	if err != nil {
+		return uuid.Nil, err
+	}
 
 	var exists bool
 	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM payments.payment_events WHERE provider_event_id = $1)`, eventID).Scan(&exists)
 	if err != nil {
-		return err
+		return uuid.Nil, err
 	}
 	if exists {
-		return tx.Commit(ctx)
+		return orderID, tx.Commit(ctx)
 	}
 
 	_, err = tx.Exec(ctx, `
 		UPDATE payments.payments SET status = 'PAID', provider_payment_id = $2, updated_at = NOW()
 		WHERE id = $1 AND status != 'PAID'`, paymentID, providerPaymentID)
 	if err != nil {
-		return err
+		return uuid.Nil, err
 	}
 
 	_, err = tx.Exec(ctx, `
 		INSERT INTO payments.payment_events (payment_id, event_type, provider_event_id, raw_payload)
 		VALUES ($1, 'PAID', $2, $3)`, paymentID, eventID, rawPayload)
 	if err != nil {
-		return err
+		return uuid.Nil, err
 	}
 
-	var orderID, userID uuid.UUID
+	var userID uuid.UUID
 	var amount int64
 	var method string
 	_ = tx.QueryRow(ctx, `SELECT order_id, user_id, amount_kopecks, method::text FROM payments.payments WHERE id = $1`, paymentID).
@@ -125,10 +131,10 @@ func (r *Repository) MarkPaid(ctx context.Context, paymentID uuid.UUID, provider
 		VALUES ($1, 'payment', $2, 'PaymentSucceeded', $3)`,
 		uuid.New(), paymentID.String(), eventPayload)
 	if err != nil {
-		return err
+		return uuid.Nil, err
 	}
 
-	return tx.Commit(ctx)
+	return orderID, tx.Commit(ctx)
 }
 
 func (r *Repository) GetByID(ctx context.Context, id uuid.UUID) (*Payment, error) {

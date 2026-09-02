@@ -111,7 +111,13 @@ func parseReferralCode(startParam string) string {
 func (s *Service) GetReferralProfile(ctx context.Context, telegramID int64) (*ReferralProfile, error) {
 	user, err := s.repo.GetByTelegramID(ctx, telegramID)
 	if err != nil {
-		return nil, apperrors.ErrNotFound
+		user, err = s.repo.UpsertUser(ctx, &telegram.WebAppUser{ID: telegramID, FirstName: "User"})
+		if err != nil {
+			return nil, apperrors.ErrInternal
+		}
+		if _, err := s.repo.EnsureReferralCode(ctx, user.ID); err != nil {
+			return nil, apperrors.ErrInternal
+		}
 	}
 	stats, err := s.repo.GetReferralStats(ctx, user.ID)
 	if err != nil {

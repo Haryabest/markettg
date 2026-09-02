@@ -58,6 +58,7 @@ func main() {
 	internalSecret := config.GetEnv("BOT_INTERNAL_SECRET", "bot-secret")
 	internal := api.Group("/internal", usermw.InternalAuth(internalSecret))
 	internal.Get("/users/telegram/:telegramId", h.ResolveByTelegramID)
+	internal.Get("/users/id/:userId", h.ResolveByUserID)
 	internal.Post("/referrals/validate-promo", h.InternalValidateReferralPromo)
 	internal.Post("/referrals/mark-promo-used", h.InternalMarkReferralPromoUsed)
 	internal.Post("/referrals/order-completed", h.InternalCompleteReferralOrder)

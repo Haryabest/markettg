@@ -230,6 +230,21 @@ func (r *Repository) ListAllOrders(ctx context.Context, limit, offset int) ([]Or
 	return orders, nil
 }
 
+func (r *Repository) ListAllOrdersWithItems(ctx context.Context, limit, offset int) ([]Order, error) {
+	orders, err := r.ListAllOrders(ctx, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	for i := range orders {
+		items, err := r.getOrderItems(ctx, orders[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		orders[i].Items = items
+	}
+	return orders, nil
+}
+
 func (r *Repository) ListPromoCodes(ctx context.Context) ([]PromoCode, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, code, discount_type::text, discount_value, max_uses, used_count, valid_from, valid_to, is_active

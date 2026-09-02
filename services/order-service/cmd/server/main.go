@@ -19,6 +19,7 @@ import (
 	"github.com/markettg/markettg/packages/go-shared/pkg/redisutil"
 	"github.com/markettg/markettg/services/order-service/internal/cart"
 	"github.com/markettg/markettg/services/order-service/internal/catalog"
+	"github.com/markettg/markettg/services/order-service/internal/delivery"
 	"github.com/markettg/markettg/services/order-service/internal/handler"
 	"github.com/markettg/markettg/services/order-service/internal/repository"
 	"github.com/markettg/markettg/services/order-service/internal/service"
@@ -49,7 +50,11 @@ func main() {
 		config.GetEnv("USER_SERVICE_URL", "http://user-service:8081"),
 		config.GetEnv("BOT_INTERNAL_SECRET", "bot-secret"),
 	)
-	svc := service.New(repo, cartStore, catalogClient, redisClient, userClient)
+	deliveryClient := delivery.NewClient(
+		config.GetEnv("DELIVERY_SERVICE_URL", "http://delivery-service:8085"),
+		config.GetEnv("BOT_INTERNAL_SECRET", "bot-secret"),
+	)
+	svc := service.New(repo, cartStore, catalogClient, redisClient, userClient, deliveryClient)
 	h := handler.New(svc, userClient)
 
 	publisher := outbox.NewPublisher(pool, redisClient, "orders", redisutil.StreamOrders)
@@ -80,6 +85,8 @@ func main() {
 
 	admin := api.Group("/admin")
 	admin.Get("/orders", h.AdminListOrders)
+	admin.Get("/orders/:id", h.AdminGetOrder)
+	admin.Post("/orders/:id/confirm-shipment", h.AdminConfirmShipment)
 	admin.Get("/promo-codes", h.AdminListPromoCodes)
 	admin.Post("/promo-codes", h.AdminCreatePromoCode)
 

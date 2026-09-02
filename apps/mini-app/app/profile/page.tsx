@@ -36,7 +36,7 @@ const purchaseLinks = [
 
 export default function ProfilePage() {
   const pathname = usePathname();
-  const user = useAuthStore((s) => s.user);
+  const user = useAuthStore((s) => s.user ?? s.telegramUser);
   const cartCount = useCartStore((s) => s.itemCount());
   const name = [user?.first_name, user?.last_name].filter(Boolean).join(" ") || "Гость";
 

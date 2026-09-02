@@ -272,7 +272,7 @@ services:
     environment:
       <<: *common-env
       PORT: "8086"
-      BOT_SERVICE_URL: http://bot:8090
+      BOT_SERVICE_URL: ${BOT_SERVICE_URL:-http://host.docker.internal:8090}
       BOT_INTERNAL_SECRET: ${BOT_INTERNAL_SECRET:-bot-secret}
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8086/health"]
@@ -295,10 +295,12 @@ services:
       GATEWAY_URL: http://gateway:8080
       BOT_INTERNAL_SECRET: ${BOT_INTERNAL_SECRET:-bot-secret}
       MINI_APP_URL: ${MINI_APP_URL:-http://localhost:3000}
+      SUPPORT_URL: ${NEXT_PUBLIC_SUPPORT_URL:-https://t.me/markettg_support}
       CATALOG_SERVICE_URL: http://catalog-service:8082
       GIFTS_SYNC_INTERVAL_SEC: ${GIFTS_SYNC_INTERVAL_SEC:-600}
       TELEGRAM_API_ID: ${TELEGRAM_API_ID:-0}
       TELEGRAM_API_HASH: ${TELEGRAM_API_HASH:-}
+      TELEGRAM_SESSION: ${TELEGRAM_SESSION:-}
     ports:
       - "8090:8090"
     networks:
@@ -308,6 +310,8 @@ services:
     build:
       context: ./apps/mini-app
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
     restart: unless-stopped
     depends_on:
       gateway:

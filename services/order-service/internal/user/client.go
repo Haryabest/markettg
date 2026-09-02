@@ -23,12 +23,37 @@ func NewClient(baseURL, secret string) *Client {
 type User struct {
 	ID         uuid.UUID `json:"id"`
 	TelegramID int64     `json:"telegram_id"`
+	Username   *string   `json:"username"`
+	FirstName  *string   `json:"first_name"`
+	LastName   *string   `json:"last_name"`
 }
 
 type PromoValidation struct {
 	DiscountType  string `json:"discount_type"`
 	DiscountValue int64  `json:"discount_value"`
 	RewardID      string `json:"reward_id"`
+}
+
+func (c *Client) GetByID(ctx context.Context, userID uuid.UUID) (*User, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET",
+		fmt.Sprintf("%s/api/v1/internal/users/id/%s", c.baseURL, userID), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-Internal-Secret", c.secret)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("user not found")
+	}
+	var user User
+	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
+		return nil, err
+	}
+	return &user, nil
 }
 
 func (c *Client) ResolveByTelegramID(ctx context.Context, telegramID int64) (*User, error) {

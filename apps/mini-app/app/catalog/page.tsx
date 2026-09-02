@@ -1,9 +1,11 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
+import { Button } from "@astryxdesign/core/Button";
 import { Heading } from "@astryxdesign/core/Heading";
+import { HStack } from "@astryxdesign/core/HStack";
 import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
 import { Skeleton } from "@astryxdesign/core/Skeleton";
 import { Text } from "@astryxdesign/core/Text";
@@ -11,14 +13,14 @@ import { TextInput } from "@astryxdesign/core/TextInput";
 import { VStack } from "@astryxdesign/core/VStack";
 import { api } from "@/lib/api";
 import { ProductGrid } from "@/components/product-grid";
+import { SortMenu } from "@/components/sort-menu";
 import { AppIcon } from "@/components/icons";
-import { Crown, Gem, Gift, Search, Star } from "lucide-react";
+import { Crown, Gift, Search, Star } from "lucide-react";
 
 const CATALOG_TABS = [
   { slug: "stars", label: "Stars", icon: Star },
   { slug: "premium", label: "Premium", icon: Crown },
   { slug: "gifts", label: "Подарки", icon: Gift },
-  { slug: "nft", label: "NFT", icon: Gem },
 ] as const;
 
 const SORT_OPTIONS = [
@@ -27,6 +29,8 @@ const SORT_OPTIONS = [
   { value: "price_asc", label: "Дешевле" },
   { value: "price_desc", label: "Дороже" },
 ] as const;
+
+const PAGE_SIZE = "100";
 
 type CatalogTabSlug = (typeof CATALOG_TABS)[number]["slug"];
 type CatalogSort = (typeof SORT_OPTIONS)[number]["value"];
@@ -47,6 +51,13 @@ function CatalogContent() {
   const category = isCatalogTab(categoryParam) ? categoryParam : "stars";
   const sortParam = params.get("sort") || "popularity";
   const sort: CatalogSort = isCatalogSort(sortParam) ? sortParam : "popularity";
+
+  useEffect(() => {
+    if (params.get("category") === "nft") {
+      router.replace(`/catalog?category=gifts&sort=${sortParam}`);
+    }
+  }, [params, router, sortParam]);
+
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -81,19 +92,38 @@ function CatalogContent() {
 
   const activeSort = isSearchActive ? "relevance" : sort;
 
-  const { data, isLoading, isFetching, isError } = useQuery({
+  const {
+    data,
+    isLoading,
+    isFetching,
+    isError,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ["products", isSearchActive ? "search" : category, debouncedQuery, activeSort],
-    queryFn: () =>
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) =>
       api.getProducts({
         ...(isSearchActive ? { q: debouncedQuery } : { category }),
         sort: activeSort,
-        limit: "24",
+        limit: PAGE_SIZE,
+        page: String(pageParam),
       }),
+    getNextPageParam: (lastPage) => {
+      const totalPages = Math.ceil(lastPage.total / lastPage.limit);
+      return lastPage.page < totalPages ? lastPage.page + 1 : undefined;
+    },
     enabled: !isTyping && (!willSearch || isSearchActive),
   });
 
+  const products = data?.pages.flatMap((page) => page.items) ?? [];
+  const total = data?.pages[0]?.total;
+
   const showSkeleton =
-    (willSearch && isTyping) || (isSearchActive && (isLoading || isFetching)) || (!willSearch && isLoading);
+    (willSearch && isTyping) ||
+    (isSearchActive && (isLoading || (isFetching && !products.length))) ||
+    (!willSearch && isLoading);
 
   const updateCatalogParams = (nextCategory: CatalogTabSlug, nextSort: CatalogSort) => {
     router.push(`/catalog?category=${nextCategory}&sort=${nextSort}`);
@@ -119,8 +149,8 @@ function CatalogContent() {
         <Text type="supporting" color="secondary" display="block">
           {showSkeleton
             ? "Загрузка…"
-            : typeof data?.total === "number"
-              ? `${data.total} товаров`
+            : typeof total === "number"
+              ? `${total} товаров${products.length < total ? ` · показано ${products.length}` : ""}`
               : "Каталог"}
         </Text>
       </VStack>
@@ -138,40 +168,35 @@ function CatalogContent() {
 
       {!isSearchActive && !willSearch ? (
         <VStack gap={2}>
-          <div className="catalog-segmented w-full">
-            <SegmentedControl
-              label="Категория"
-              value={category}
-              onChange={(value) => updateCatalogParams(value as CatalogTabSlug, sort)}
-              layout="fill"
-            >
-              {CATALOG_TABS.map((tab) => (
-                <SegmentedControlItem
-                  key={tab.slug}
-                  value={tab.slug}
-                  label={tab.label}
-                  icon={<AppIcon icon={tab.icon} size={16} />}
-                />
-              ))}
-            </SegmentedControl>
-          </div>
-          <div className="catalog-segmented w-full">
-            <SegmentedControl
-              label="Сортировка"
+          <HStack justify="between" align="center" gap={2}>
+            <div className="catalog-segmented min-w-0 flex-1">
+              <SegmentedControl
+                label="Категория"
+                value={category}
+                onChange={(value) => updateCatalogParams(value as CatalogTabSlug, sort)}
+                layout="fill"
+              >
+                {CATALOG_TABS.map((tab) => (
+                  <SegmentedControlItem
+                    key={tab.slug}
+                    value={tab.slug}
+                    label={tab.label}
+                    icon={<AppIcon icon={tab.icon} size={16} />}
+                  />
+                ))}
+              </SegmentedControl>
+            </div>
+            <SortMenu
               value={sort}
+              options={SORT_OPTIONS}
               onChange={(value) => updateCatalogParams(category, value as CatalogSort)}
-              layout="fill"
-            >
-              {SORT_OPTIONS.map((option) => (
-                <SegmentedControlItem key={option.value} value={option.value} label={option.label} />
-              ))}
-            </SegmentedControl>
-          </div>
+            />
+          </HStack>
         </VStack>
       ) : null}
 
       <ProductGrid
-        products={showSkeleton ? undefined : data?.items}
+        products={showSkeleton ? undefined : products}
         isLoading={showSkeleton}
         isError={isError}
         onRetry={() => queryClient.invalidateQueries({ queryKey: ["products"] })}
@@ -180,12 +205,21 @@ function CatalogContent() {
           isSearchActive
             ? "Попробуйте «stars», «premium» или название подарка."
             : category === "gifts"
-              ? "Нужен TELEGRAM_BOT_TOKEN и запущенный catalog-service. Синк идёт на сервере, не в Mini App. Проверьте .env и docker compose up catalog-service bot."
-              : category === "nft"
-                ? "Нужны TELEGRAM_BOT_TOKEN, TELEGRAM_API_ID и TELEGRAM_API_HASH. Запустите bot — он подтянет NFT с перепродажи Telegram."
-                : "Попробуйте другую вкладку — Stars, Premium, Подарки или NFT."
+              ? "Запустите bot — он подтянет весь каталог подарков Telegram (~150 шт.)."
+              : "Попробуйте другую вкладку — Stars, Premium или Подарки."
         }
       />
+
+      {!showSkeleton && hasNextPage ? (
+        <Button
+          label={isFetchingNextPage ? "Загрузка…" : "Показать ещё"}
+          variant="secondary"
+          width="100%"
+          clickAction={() => {
+            void fetchNextPage();
+          }}
+        />
+      ) : null}
     </VStack>
   );
 }

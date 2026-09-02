@@ -1,4 +1,4 @@
-package handler
+package api
 
 import (
 	"strconv"
@@ -11,11 +11,19 @@ import (
 )
 
 type Handler struct {
-	svc *service.Service
+	svc            *service.Service
+	internalSecret string
 }
 
-func New(svc *service.Service) *Handler {
-	return &Handler{svc: svc}
+func New(svc *service.Service, internalSecret string) *Handler {
+	return &Handler{svc: svc, internalSecret: internalSecret}
+}
+
+func (h *Handler) RequireInternal(c *fiber.Ctx) error {
+	if h.internalSecret == "" || c.Get("X-Internal-Secret") != h.internalSecret {
+		return fiber.ErrUnauthorized
+	}
+	return c.Next()
 }
 
 func (h *Handler) ListDeliveries(c *fiber.Ctx) error {
@@ -34,6 +42,29 @@ func (h *Handler) RetryDelivery(c *fiber.Ctx) error {
 		return fiber.ErrBadRequest
 	}
 	if err := h.svc.RetryDelivery(c.Context(), id); err != nil {
+		return err
+	}
+	return httputil.JSON(c, fiber.StatusOK, fiber.Map{"ok": true})
+}
+
+func (h *Handler) ConfirmDelivery(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return fiber.ErrBadRequest
+	}
+	job, err := h.svc.ConfirmDelivery(c.Context(), id)
+	if err != nil {
+		return err
+	}
+	return httputil.JSON(c, fiber.StatusOK, job)
+}
+
+func (h *Handler) InternalConfirmOrderDeliveries(c *fiber.Ctx) error {
+	orderID, err := uuid.Parse(c.Params("orderId"))
+	if err != nil {
+		return fiber.ErrBadRequest
+	}
+	if err := h.svc.ConfirmOrderDeliveries(c.Context(), orderID); err != nil {
 		return err
 	}
 	return httputil.JSON(c, fiber.StatusOK, fiber.Map{"ok": true})

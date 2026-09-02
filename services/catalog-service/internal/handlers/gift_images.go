@@ -45,18 +45,18 @@ func (h *GiftsHandler) StoreGiftImage(
 		data, err := decodeImageBase64(*imageBase64)
 		if err == nil && len(data) > 0 {
 			key := fmt.Sprintf("%s/%s.webp", prefix, repository.SlugForTelegramGift(idKey))
-			if err := h.s3.PutBytes(ctx, key, data, "image/webp"); err == nil {
+			if err := h.s3.PutBytes(ctx, key, data, contentTypeForExt(detectImageExt(data))); err == nil {
 				return key, nil
 			}
 		}
 	}
 
 	fileIDs := make([]string, 0, 2)
-	if thumbFileID != nil && strings.TrimSpace(*thumbFileID) != "" {
-		fileIDs = append(fileIDs, strings.TrimSpace(*thumbFileID))
-	}
 	if stickerFileID != nil && strings.TrimSpace(*stickerFileID) != "" {
 		fileIDs = append(fileIDs, strings.TrimSpace(*stickerFileID))
+	}
+	if thumbFileID != nil && strings.TrimSpace(*thumbFileID) != "" {
+		fileIDs = append(fileIDs, strings.TrimSpace(*thumbFileID))
 	}
 
 	for _, fileID := range fileIDs {
@@ -74,4 +74,37 @@ func (h *GiftsHandler) StoreGiftImage(
 		return key, nil
 	}
 	return "", fmt.Errorf("no image")
+}
+
+func (h *GiftsHandler) StoreGiftSticker(
+	ctx context.Context,
+	idKey string,
+	stickerBase64 *string,
+	prefix string,
+) (string, error) {
+	if stickerBase64 == nil || strings.TrimSpace(*stickerBase64) == "" {
+		return "", fmt.Errorf("empty sticker")
+	}
+	data, err := decodeImageBase64(*stickerBase64)
+	if err != nil || len(data) == 0 {
+		return "", fmt.Errorf("invalid sticker")
+	}
+	key := fmt.Sprintf("%s/%s.tgs", prefix, repository.SlugForTelegramGift(idKey))
+	if err := h.s3.PutBytes(ctx, key, data, "application/x-tgsticker"); err != nil {
+		return "", err
+	}
+	return key, nil
+}
+
+func detectImageExt(data []byte) string {
+	if len(data) >= 3 && data[0] == 0xFF && data[1] == 0xD8 {
+		return ".jpg"
+	}
+	if len(data) >= 8 && string(data[:8]) == "\x89PNG\r\n\x1a\n" {
+		return ".png"
+	}
+	if len(data) >= 12 && string(data[8:12]) == "WEBP" {
+		return ".webp"
+	}
+	return ".webp"
 }

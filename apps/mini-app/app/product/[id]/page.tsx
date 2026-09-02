@@ -15,6 +15,7 @@ import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
 import { effectivePrice, giftStarLabel, productBadge, productFacts, productShortHint } from "@/lib/product";
 import { AppIcon, productTypeIcon } from "@/components/icons";
+import { GiftMedia } from "@/components/gift-media";
 import { FilledButton } from "@/components/filled-button";
 import { notifyError } from "@/stores/banners";
 import { useCartStore } from "@/stores/app";
@@ -106,17 +107,16 @@ export default function ProductPage() {
         size="md"
         onClick={handleBack}
       />
-      <div className="flex aspect-square items-center justify-center rounded-[var(--radius-container,16px)] bg-[radial-gradient(circle_at_center,#1a2238_0%,#0d0f14_70%)]">
-        {product.image_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={product.image_url}
-            alt=""
-            className="h-[78%] w-[78%] object-contain drop-shadow-[0_16px_36px_rgba(0,0,0,0.45)]"
-          />
-        ) : (
-          <AppIcon icon={Icon} size={72} />
-        )}
+      <div className="flex aspect-square items-center justify-center rounded-[var(--radius-container,16px)] bg-[radial-gradient(circle_at_center,#1a2238_0%,#0d0f14_70%)] p-4">
+        <GiftMedia
+          name={product.name}
+          imageUrl={product.image_url}
+          stickerUrl={product.delivery_config?.sticker_url}
+          fallbackIcon={Icon}
+          animated={product.product_type === "GIFT" || product.product_type === "NFT"}
+          className="h-full w-full"
+          imageClassName="h-full w-full max-h-[min(78vw,420px)] max-w-[min(78vw,420px)]"
+        />
       </div>
       <VStack gap={2}>
         <HStack gap={2} align="center">

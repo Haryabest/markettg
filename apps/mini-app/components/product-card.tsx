@@ -7,6 +7,7 @@ import { VStack } from "@astryxdesign/core/VStack";
 import { formatPrice } from "@/lib/utils";
 import { collectibleStarLabel, effectivePrice, productBadge } from "@/lib/product";
 import { AppIcon, productTypeIcon } from "@/components/icons";
+import { GiftMedia } from "@/components/gift-media";
 import type { Product } from "@/lib/api";
 import { Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -49,8 +50,8 @@ export function ProductCard({ product }: { product: Product }) {
   const Icon = productTypeIcon(product.product_type, product.delivery_config?.gift_id);
   const price = effectivePrice(product);
   const starLabel = collectibleStarLabel(product);
-  const hasPreview = Boolean(product.image_url);
   const isCollectible = product.product_type === "GIFT" || product.product_type === "NFT";
+  const hasPreview = Boolean(product.image_url || product.delivery_config?.sticker_url);
   const hasSale = Boolean(
     product.on_sale && product.sale_price_kopecks && product.sale_price_kopecks < product.price_kopecks
   );
@@ -80,11 +81,12 @@ export function ProductCard({ product }: { product: Product }) {
             </div>
           ) : null}
           {hasPreview ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={product.image_url}
-              alt=""
-              className="h-[82%] w-[82%] object-contain drop-shadow-[0_12px_28px_rgba(0,0,0,0.45)]"
+            <GiftMedia
+              name={product.name}
+              imageUrl={product.image_url}
+              stickerUrl={product.delivery_config?.sticker_url}
+              fallbackIcon={Icon}
+              imageClassName="h-[88%] w-[88%]"
             />
           ) : (
             <div
