@@ -1,25 +1,18 @@
 "use client";
+import { Badge, Button, EmptyState, Heading, HStack, List, ListItem, Skeleton, Text, VStack } from "@/components/ui";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
-import { Badge } from "@astryxdesign/core/Badge";
-import { Button } from "@astryxdesign/core/Button";
-import { EmptyState } from "@astryxdesign/core/EmptyState";
-import { Heading } from "@astryxdesign/core/Heading";
-import { HStack } from "@astryxdesign/core/HStack";
-import { List, ListItem } from "@astryxdesign/core/List";
-import { Skeleton } from "@astryxdesign/core/Skeleton";
-import { Text } from "@astryxdesign/core/Text";
-import { VStack } from "@astryxdesign/core/VStack";
 import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
 import { effectivePrice, giftStarLabel, productBadge, productFacts, productShortHint } from "@/lib/product";
+import { ActionIcon } from "@/components/action-icon";
 import { AppIcon, productTypeIcon } from "@/components/icons";
 import { GiftMedia } from "@/components/gift-media";
 import { FilledButton } from "@/components/filled-button";
 import { notifyError } from "@/stores/banners";
 import { useCartStore } from "@/stores/app";
-import { Check, CreditCard, Heart, ShoppingBag, Zap, ArrowLeft } from "lucide-react";
+import { Check, Zap } from "lucide-react";
 
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
@@ -67,7 +60,7 @@ export default function ProductPage() {
       <VStack gap={4}>
         <FilledButton
           label="Назад"
-          icon={<AppIcon icon={ArrowLeft} size={18} />}
+          icon={<ActionIcon name="arrow-left" size={18} />}
           size="md"
           onClick={handleBack}
         />
@@ -103,7 +96,7 @@ export default function ProductPage() {
     <VStack gap={5}>
       <FilledButton
         label="Назад"
-        icon={<AppIcon icon={ArrowLeft} size={18} />}
+        icon={<ActionIcon name="arrow-left" size={18} />}
         size="md"
         onClick={handleBack}
       />
@@ -166,7 +159,7 @@ export default function ProductPage() {
           variant="primary"
           size="lg"
           width="100%"
-          icon={<AppIcon icon={CreditCard} />}
+          icon={<ActionIcon name="credit-card" size={20} />}
           clickAction={handleBuyNow}
         />
         <HStack gap={2}>
@@ -174,14 +167,14 @@ export default function ProductPage() {
             label={favorite ? "В избранном" : "В избранное"}
             active={favorite}
             size="md"
-            icon={<AppIcon icon={Heart} />}
+            icon={<ActionIcon name="heart" size={18} />}
             onClick={() => toggleFav.mutateAsync()}
             className="flex-1"
           />
           <FilledButton
             label="В корзину"
             size="md"
-            icon={<AppIcon icon={ShoppingBag} />}
+            icon={<ActionIcon name="shopping-bag" size={18} />}
             onClick={handleAddToCart}
             className="flex-1"
           />

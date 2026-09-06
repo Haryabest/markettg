@@ -1,6 +1,4 @@
-import { Heading } from "@astryxdesign/core/Heading";
-import { Text } from "@astryxdesign/core/Text";
-import { VStack } from "@astryxdesign/core/VStack";
+import { Heading, Text, VStack } from "@/components/ui";
 
 export default function TermsPage() {
   return (

@@ -1,14 +1,14 @@
 import { dismissBanner, notifyError, notifySlow } from "@/stores/banners";
 
 function apiBase(): string {
-  const raw = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
-  if (raw) {
-    if (typeof window !== "undefined" && (raw.includes("localhost") || raw.includes("127.0.0.1"))) {
-      return "";
-    }
+  if (typeof window !== "undefined") {
+    return "";
+  }
+  const raw = (process.env.NEXT_PUBLIC_API_URL ?? process.env.API_URL ?? "").replace(/\/$/, "");
+  if (raw && !raw.includes("localhost") && !raw.includes("127.0.0.1")) {
     return raw;
   }
-  return typeof window === "undefined" ? "http://localhost:8080" : "";
+  return process.env.API_URL?.replace(/\/$/, "") || "http://localhost:8080";
 }
 
 const API_URL = apiBase();

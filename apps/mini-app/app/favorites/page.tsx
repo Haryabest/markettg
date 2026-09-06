@@ -1,15 +1,10 @@
 "use client";
+import { EmptyState, Heading, Text, VStack, Button } from "@/components/ui";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { EmptyState } from "@astryxdesign/core/EmptyState";
-import { Heading } from "@astryxdesign/core/Heading";
-import { Text } from "@astryxdesign/core/Text";
-import { VStack } from "@astryxdesign/core/VStack";
-import { Button } from "@astryxdesign/core/Button";
 import { api } from "@/lib/api";
 import { ProductGrid } from "@/components/product-grid";
-import { AppIcon } from "@/components/icons";
-import { ShoppingBag } from "lucide-react";
+import { ActionIcon } from "@/components/action-icon";
 
 export default function FavoritesPage() {
   const queryClient = useQueryClient();
@@ -47,7 +42,7 @@ export default function FavoritesPage() {
               label="В каталог"
               href="/catalog"
               variant="primary"
-              icon={<AppIcon icon={ShoppingBag} />}
+              icon={<ActionIcon name="layout-grid" size={20} />}
             />
           }
         />

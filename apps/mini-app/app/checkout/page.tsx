@@ -1,35 +1,38 @@
 "use client";
+import { Button, Heading, HStack, List, ListItem, Text, TextInput, VStack } from "@/components/ui";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Button } from "@astryxdesign/core/Button";
-import { Heading } from "@astryxdesign/core/Heading";
-import { HStack } from "@astryxdesign/core/HStack";
-import { List, ListItem } from "@astryxdesign/core/List";
-import { Text } from "@astryxdesign/core/Text";
-import { TextInput } from "@astryxdesign/core/TextInput";
-import { VStack } from "@astryxdesign/core/VStack";
 import { api } from "@/lib/api";
 import { applyPromoCode, promoSuccessMessage, type AppliedPromo } from "@/lib/promo";
 import { formatPrice } from "@/lib/utils";
+import { ActionIcon } from "@/components/action-icon";
+import type { ActionIconName } from "@/components/action-icon";
 import { AppIcon } from "@/components/icons";
-import { Banknote, ArrowRight, Star, Ticket, Wallet } from "lucide-react";
+import { Ticket } from "lucide-react";
 import { notifyError, notifySuccess } from "@/stores/banners";
-import { useCartStore } from "@/stores/app";
+import { useAuthStore, useCartStore } from "@/stores/app";
+import { openTelegramInvoice } from "@/lib/telegram";
+import { useActionIconTrigger } from "@/lib/action-icon-trigger";
 
-const PAYMENT_METHODS = [
+const PAYMENT_METHODS: {
+  value: "STARS" | "SBP";
+  label: string;
+  description: string;
+  icon: ActionIconName;
+}[] = [
   {
-    value: "STARS" as const,
+    value: "STARS",
     label: "Telegram Stars",
     description: "Оплата внутри Telegram, без банковской карты",
-    icon: Star,
+    icon: "star",
   },
   {
-    value: "SBP" as const,
+    value: "SBP",
     label: "СБП",
     description: "Ссылка на оплату через систему быстрых платежей",
-    icon: Banknote,
+    icon: "banknote",
   },
 ];
 
@@ -56,11 +59,17 @@ export default function CheckoutPage() {
   const [promoInput, setPromoInput] = useState("");
   const [appliedPromo, setAppliedPromo] = useState<AppliedPromo | null>(null);
   const [method, setMethod] = useState<"STARS" | "SBP">("STARS");
+  const { icon: applyPromoIcon, onParentPointerDown: onApplyPromoPointerDown } = useActionIconTrigger(
+    <ActionIcon name="arrow-right" size={16} />
+  );
 
   const items = cart?.items || [];
+  const initData = useAuthStore((s) => s.initData);
+  const isReady = useAuthStore((s) => s.isReady);
   const { data: referrals } = useQuery({
     queryKey: ["referrals"],
     queryFn: () => api.getReferrals(),
+    enabled: isReady && Boolean(initData),
     retry: false,
   });
   const { data: products } = useQuery({
@@ -95,10 +104,26 @@ export default function CheckoutPage() {
     try {
       const order = await api.createOrder(appliedPromo?.code || promoInput.trim() || undefined);
       const payment = await api.createPayment(order.id, method);
+
       if (payment.payment_url) {
-        window.open(payment.payment_url, "_blank");
+        const status = method === "STARS" ? await openTelegramInvoice(payment.payment_url) : null;
+        if (status === null) {
+          window.open(payment.payment_url, "_blank");
+        } else if (status === "cancelled") {
+          notifyError("Оплата отменена", "Заказ сохранён — оплатить можно из карточки заказа");
+          router.push(`/orders/${order.id}`);
+          return;
+        } else if (status === "failed") {
+          notifyError("Оплата не прошла", "Попробуйте ещё раз или выберите другой способ");
+          router.push(`/orders/${order.id}`);
+          return;
+        }
       }
-      notifySuccess("Заказ создан", "Переходим к статусу оплаты");
+
+      notifySuccess(
+        "Заказ создан",
+        method === "STARS" ? "Оплата получена — готовим доставку" : "Переходим к статусу оплаты"
+      );
       router.push(`/orders/${order.id}`);
     } catch (e) {
       const message = e instanceof Error ? e.message : "Ошибка оформления";
@@ -190,11 +215,12 @@ export default function CheckoutPage() {
           <button
             type="button"
             onClick={handleApplyPromo}
+            onPointerDownCapture={onApplyPromoPointerDown}
             disabled={!promoInput.trim()}
             aria-label="Применить промокод"
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center self-center rounded-lg bg-[#007aff] text-white transition-colors hover:bg-[#0066d6] disabled:cursor-not-allowed disabled:opacity-40 dark:bg-[#0a84ff] dark:hover:bg-[#409cff]"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center self-center rounded-lg bg-[var(--tg-button-color,#007aff)] text-[var(--tg-button-text-color,#fff)] transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <AppIcon icon={ArrowRight} size={16} />
+            {applyPromoIcon}
           </button>
         </HStack>
         <Text type="supporting" color="secondary" display="block">
@@ -213,7 +239,7 @@ export default function CheckoutPage() {
               key={option.value}
               label={option.label}
               description={option.description}
-              startContent={<AppIcon icon={option.icon} size={20} />}
+              startContent={<ActionIcon name={option.icon} size={20} />}
               endContent={<PaymentRadio selected={method === option.value} />}
               onClick={() => setMethod(option.value)}
             />
@@ -225,7 +251,7 @@ export default function CheckoutPage() {
         variant="primary"
         size="lg"
         width="100%"
-        icon={<AppIcon icon={Wallet} />}
+        icon={<ActionIcon name="wallet" size={20} />}
         clickAction={handleCheckout}
       />
     </VStack>

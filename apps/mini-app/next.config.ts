@@ -4,7 +4,7 @@ const apiOrigin = process.env.API_URL || "http://localhost:8080";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  transpilePackages: ["@astryxdesign/core", "@astryxdesign/theme-neutral", "@stylexjs/stylex"],
+  transpilePackages: ["@heroui/react"],
   images: {
     remotePatterns: [
       { protocol: "http", hostname: "localhost", port: "9000" },

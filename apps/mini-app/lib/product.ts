@@ -1,4 +1,4 @@
-import type { BadgeVariant } from "@astryxdesign/core/Badge";
+import type { BadgeVariant } from "@/components/ui";
 import type { LucideIcon } from "lucide-react";
 import type { Product } from "@/lib/api";
 import { formatPrice } from "@/lib/utils";

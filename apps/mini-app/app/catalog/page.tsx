@@ -1,26 +1,18 @@
 "use client";
+import { Button, Heading, HStack, SegmentedControl, SegmentedControlItem, Skeleton, Text, TextInput, VStack } from "@/components/ui";
 
 import { useQuery, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import { Button } from "@astryxdesign/core/Button";
-import { Heading } from "@astryxdesign/core/Heading";
-import { HStack } from "@astryxdesign/core/HStack";
-import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
-import { Skeleton } from "@astryxdesign/core/Skeleton";
-import { Text } from "@astryxdesign/core/Text";
-import { TextInput } from "@astryxdesign/core/TextInput";
-import { VStack } from "@astryxdesign/core/VStack";
 import { api } from "@/lib/api";
 import { ProductGrid } from "@/components/product-grid";
 import { SortMenu } from "@/components/sort-menu";
-import { AppIcon } from "@/components/icons";
-import { Crown, Gift, Search, Star } from "lucide-react";
+import { ActionIcon } from "@/components/action-icon";
 
 const CATALOG_TABS = [
-  { slug: "stars", label: "Stars", icon: Star },
-  { slug: "premium", label: "Premium", icon: Crown },
-  { slug: "gifts", label: "Подарки", icon: Gift },
+  { slug: "stars", label: "Stars", icon: "star" },
+  { slug: "premium", label: "Premium", icon: "user-star" },
+  { slug: "gifts", label: "Подарки", icon: "gift" },
 ] as const;
 
 const SORT_OPTIONS = [
@@ -163,7 +155,7 @@ function CatalogContent() {
         placeholder="Premium, Stars, подарок..."
         hasClear
         width="100%"
-        startIcon={<AppIcon icon={Search} size={16} />}
+        startIcon={<ActionIcon name="search" size={16} />}
       />
 
       {!isSearchActive && !willSearch ? (
@@ -181,7 +173,9 @@ function CatalogContent() {
                     key={tab.slug}
                     value={tab.slug}
                     label={tab.label}
-                    icon={<AppIcon icon={tab.icon} size={16} />}
+                    icon={<ActionIcon name={tab.icon} size={16} />}
+                    activeValue={category}
+                    onSelect={(value) => updateCatalogParams(value as CatalogTabSlug, sort)}
                   />
                 ))}
               </SegmentedControl>

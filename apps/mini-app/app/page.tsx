@@ -1,13 +1,7 @@
 "use client";
+import { Banner, Heading, HStack, Link, Text, VStack, Grid } from "@/components/ui";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Banner } from "@astryxdesign/core/Banner";
-import { Heading } from "@astryxdesign/core/Heading";
-import { HStack } from "@astryxdesign/core/HStack";
-import { Link } from "@astryxdesign/core/Link";
-import { Text } from "@astryxdesign/core/Text";
-import { VStack } from "@astryxdesign/core/VStack";
-import { Grid } from "@astryxdesign/core/Grid";
 import { api } from "@/lib/api";
 import { AppIcon } from "@/components/icons";
 import { ProductGrid } from "@/components/product-grid";

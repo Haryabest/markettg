@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Text } from "@astryxdesign/core/Text";
+import { ActionIcon } from "@/components/action-icon";
 import { AppIcon } from "@/components/icons";
-import { ArrowUpDown, Check } from "lucide-react";
+import { useActionIconTrigger } from "@/lib/action-icon-trigger";
+import { Check } from "lucide-react";
 
 export type SortOption = {
   value: string;
@@ -22,6 +23,9 @@ export function SortMenu({
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const active = options.find((option) => option.value === value);
+  const { icon: wiredIcon, onParentPointerDown } = useActionIconTrigger(
+    <ActionIcon name="arrow-up-down" size={16} />
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -41,15 +45,14 @@ export function SortMenu({
         aria-label="Сортировка"
         aria-expanded={open}
         onClick={() => setOpen((prev) => !prev)}
-        className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[var(--color-border-default,rgba(0,0,0,.08))] bg-[var(--color-background-surface,#fff)] px-3 text-sm text-[var(--color-text-primary,#1b1b1b)] shadow-sm"
+        onPointerDownCapture={onParentPointerDown}
+        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--tg-button-color,var(--color-border-default,rgba(0,0,0,.16)))] bg-[var(--tg-secondary-bg-color,var(--color-background-surface,#fff))] text-[var(--tg-button-color,var(--color-text-primary,#1b1b1b))]"
+        title={active?.label ?? "Сортировка"}
       >
-        <AppIcon icon={ArrowUpDown} size={16} />
-        <Text type="label" weight="medium" display="inline">
-          {active?.label ?? "Сортировка"}
-        </Text>
+        {wiredIcon}
       </button>
       {open ? (
-        <div className="absolute right-0 top-[calc(100%+6px)] z-20 min-w-[180px] overflow-hidden rounded-[12px] border border-[var(--color-border-default,rgba(0,0,0,.08))] bg-[var(--color-background-surface,#fff)] py-1 shadow-lg">
+        <div className="absolute right-0 top-[calc(100%+6px)] z-20 min-w-[180px] overflow-hidden rounded-[12px] border border-[var(--color-border-default,rgba(0,0,0,.08))] bg-[var(--color-background-surface,var(--tg-secondary-bg-color,#fff))] py-1 shadow-lg">
           {options.map((option) => {
             const selected = option.value === value;
             return (

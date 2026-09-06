@@ -9,11 +9,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ru">
+    <html lang="ru" suppressHydrationWarning>
       <head>
         <script src="https://telegram.org/js/telegram-web-app.js" />
       </head>
-      <body className="antialiased" id="__astryx-miniap">
+      <body className="antialiased" id="__miniap">
         <AppProviders>{children}</AppProviders>
       </body>
     </html>

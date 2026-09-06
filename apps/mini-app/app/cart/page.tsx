@@ -1,23 +1,14 @@
 "use client";
+import { Banner, Button, EmptyState, Heading, HStack, List, ListItem, NumberInput, Text, VStack } from "@/components/ui";
 
 import { useEffect } from "react";
 import { useQueries } from "@tanstack/react-query";
-import { Banner } from "@astryxdesign/core/Banner";
-import { Button } from "@astryxdesign/core/Button";
-import { EmptyState } from "@astryxdesign/core/EmptyState";
-import { Heading } from "@astryxdesign/core/Heading";
-import { HStack } from "@astryxdesign/core/HStack";
-import { List, ListItem } from "@astryxdesign/core/List";
-import { NumberInput } from "@astryxdesign/core/NumberInput";
-import { Text } from "@astryxdesign/core/Text";
-import { VStack } from "@astryxdesign/core/VStack";
 import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
 import { effectivePrice, productShortHint } from "@/lib/product";
+import { ActionIcon } from "@/components/action-icon";
 import { AppIcon, productTypeIcon } from "@/components/icons";
 import { useCartStore } from "@/stores/app";
-import { CreditCard, ShoppingBag, Trash2 } from "lucide-react";
-
 export default function CartPage() {
   const { cart, fetchCart, addItem, removeItem, isLocal } = useCartStore();
 
@@ -67,7 +58,7 @@ export default function CartPage() {
               label="В каталог"
               href="/catalog"
               variant="primary"
-              icon={<AppIcon icon={ShoppingBag} />}
+              icon={<ActionIcon name="shopping-bag" size={20} />}
             />
           }
         />
@@ -107,7 +98,7 @@ export default function CartPage() {
                         variant="ghost"
                         size="sm"
                         isIconOnly
-                        icon={<AppIcon icon={Trash2} size={16} />}
+                        icon={<ActionIcon name="trash-2" size={16} />}
                         clickAction={() => removeItem(item.product_id)}
                       />
                     </HStack>
@@ -130,7 +121,7 @@ export default function CartPage() {
             variant="primary"
             size="lg"
             width="100%"
-            icon={<AppIcon icon={CreditCard} />}
+            icon={<ActionIcon name="credit-card" size={20} />}
           />
         </>
       )}

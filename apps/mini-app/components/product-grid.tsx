@@ -1,12 +1,9 @@
 "use client";
+import { Button, EmptyState, Grid, Skeleton } from "@/components/ui";
 
-import { Button } from "@astryxdesign/core/Button";
-import { EmptyState } from "@astryxdesign/core/EmptyState";
-import { Grid } from "@astryxdesign/core/Grid";
-import { Skeleton } from "@astryxdesign/core/Skeleton";
 import { ProductCard } from "@/components/product-card";
+import { ActionIcon } from "@/components/action-icon";
 import { AppIcon } from "@/components/icons";
-import { RefreshCw } from "lucide-react";
 import type { Product } from "@/lib/api";
 
 export function ProductGrid({
@@ -51,7 +48,7 @@ export function ProductGrid({
             <Button
               label="Повторить"
               variant="primary"
-              icon={<AppIcon icon={RefreshCw} />}
+              icon={<ActionIcon name="refresh-cw" size={18} />}
               clickAction={onRetry}
             />
           ) : undefined

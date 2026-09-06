@@ -1,64 +1,35 @@
-@layer reset, theme, base, astryx-base, astryx-theme, components, utilities;
-
-@import "tailwindcss/theme.css" layer(theme);
-@import "tailwindcss/preflight.css" layer(base);
-@import "@astryxdesign/core/reset.css";
-@import "@astryxdesign/core/astryx.css";
-@import "@astryxdesign/theme-neutral/theme.css";
-@import "@astryxdesign/core/tailwind-theme.css";
-@import "tailwindcss/utilities.css" layer(utilities);
+@import "tailwindcss";
+@import "@heroui/styles";
 
 html,
 body {
   min-height: 100%;
-  background: var(--color-background-wash, #f6f6f4);
-  color: var(--color-text-primary, #1b1b1b);
+  background: var(--background, var(--tg-bg-color, #ffffff));
+  color: var(--foreground, var(--tg-text-color, #1b1b1b));
+}
+
+.dark html,
+.dark body,
+html.dark,
+html.dark body {
+  background: var(--background, var(--tg-bg-color, #0f0f0f));
+  color: var(--foreground, var(--tg-text-color, #fafafa));
 }
 
 body {
   padding-bottom: env(safe-area-inset-bottom);
-  font-family: var(--font-family-sans, system-ui, sans-serif);
 }
 
-#__astryx-miniap {
+#__miniap {
   min-height: 100dvh;
 }
 
-.sheet-surface {
-  color: var(--color-text-primary, #1b1b1b);
+.catalog-segmented [data-selected="true"] {
+  background-color: var(--tg-button-color, #007aff) !important;
+  color: var(--tg-button-text-color, #fff) !important;
 }
 
-.sheet-surface h1,
-.sheet-surface h2,
-.sheet-surface h3,
-.sheet-surface h4,
-.sheet-surface [role="heading"],
-.sheet-surface label {
-  color: inherit;
-}
-
-.dark .sheet-surface {
-  --color-text-primary: #f4f4f5;
-  --color-text-secondary: #a1a1aa;
-  color: var(--color-text-primary);
-}
-
-.dark .sheet-surface [data-color="secondary"],
-.dark .sheet-surface [class*="secondary"] {
-  color: var(--color-text-secondary) !important;
-}
-
-.catalog-segmented .astryx-segmented-control-item[aria-checked="true"] {
-  background-color: #007aff !important;
-  color: #ffffff !important;
-  box-shadow: none !important;
-}
-
-.dark .catalog-segmented .astryx-segmented-control-item[aria-checked="true"] {
-  background-color: #0a84ff !important;
-  color: #ffffff !important;
-}
-
-.catalog-segmented .astryx-segmented-control-item[aria-checked="true"] svg {
-  color: #ffffff !important;
+[data-action-icon],
+[data-action-icon] * {
+  pointer-events: none !important;
 }

@@ -7,18 +7,23 @@ import {
   Gem,
   Gift,
   Heart,
-  Home,
-  LayoutGrid,
   Package,
   Rocket,
-  Search,
   ShoppingBag,
   Sparkles,
   Star,
   Trophy,
-  UserRound,
   Wine,
 } from "lucide-react";
+import type { ActionIconName } from "@/components/action-icon";
+
+export const navActionIcons = {
+  home: "home",
+  catalog: "layout-grid",
+  search: "search",
+  cart: "shopping-bag",
+  profile: "user-round",
+} as const satisfies Record<string, ActionIconName>;
 
 export function AppIcon({
   icon: Icon,
@@ -29,14 +34,6 @@ export function AppIcon({
 }) {
   return <Icon size={size} strokeWidth={2} aria-hidden />;
 }
-
-export const navIcons = {
-  home: Home,
-  catalog: LayoutGrid,
-  search: Search,
-  cart: ShoppingBag,
-  profile: UserRound,
-};
 
 export function categoryIcon(slug: string): LucideIcon {
   if (slug === "stars") return Star;

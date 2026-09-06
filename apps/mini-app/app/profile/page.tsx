@@ -1,44 +1,44 @@
 "use client";
+import { Avatar, Card, Heading, Item, Text, VStack } from "@/components/ui";
 
 import { usePathname } from "next/navigation";
-import { Avatar } from "@astryxdesign/core/Avatar";
-import { Card } from "@astryxdesign/core/Card";
-import { Heading } from "@astryxdesign/core/Heading";
-import { Item } from "@astryxdesign/core/Item";
-import { Text } from "@astryxdesign/core/Text";
-import { VStack } from "@astryxdesign/core/VStack";
 import { FilledButton } from "@/components/filled-button";
+import { ActionIcon } from "@/components/action-icon";
 import { AppIcon } from "@/components/icons";
 import { openSupport } from "@/lib/support";
 import { useAuthStore, useCartStore } from "@/stores/app";
-import { FileText, Gift, Heart, HelpCircle, MessageCircle, Package, Shield, ShoppingBag, Star, Users } from "lucide-react";
+import { getDisplayDescription, getDisplayName } from "@/lib/user-display";
+import { HelpCircle } from "lucide-react";
 
 const purchaseLinks = [
   {
     href: "/orders",
     label: "Мои заказы",
     description: "Статус оплаты и доставки Stars / Premium / Gift",
-    icon: Package,
+    icon: "package",
   },
   {
     href: "/favorites",
     label: "Избранное",
     description: "Сохранённые пакеты и подарки",
-    icon: Heart,
+    icon: "heart",
   },
   {
     href: "/cart",
     label: "Корзина",
     description: "Товары, ожидающие оплаты",
-    icon: ShoppingBag,
+    icon: "shopping-bag",
   },
 ] as const;
 
 export default function ProfilePage() {
   const pathname = usePathname();
   const user = useAuthStore((s) => s.user ?? s.telegramUser);
+  const isReady = useAuthStore((s) => s.isReady);
+  const initData = useAuthStore((s) => s.initData);
   const cartCount = useCartStore((s) => s.itemCount());
-  const name = [user?.first_name, user?.last_name].filter(Boolean).join(" ") || "Гость";
+  const name = getDisplayName(user, isReady);
+  const description = getDisplayDescription(user, isReady, Boolean(initData));
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
@@ -55,11 +55,7 @@ export default function ProfilePage() {
         <Item
           startContent={<Avatar name={name} src={user?.photo_url} />}
           label={name}
-          description={
-            user?.username
-              ? `@${user.username} · ID ${user.telegram_id}`
-              : "Гостевой режим. Для оплаты откройте Mini App из Telegram."
-          }
+          description={description}
         />
       </Card>
 
@@ -79,7 +75,7 @@ export default function ProfilePage() {
                   : "Пока пусто — загляните в каталог"
                 : item.description
             }
-            icon={<AppIcon icon={item.icon} size={20} />}
+            icon={<ActionIcon name={item.icon} size={20} />}
             active={isActive(item.href)}
             variant="menu"
             size="md"
@@ -96,7 +92,7 @@ export default function ProfilePage() {
           href="/profile/referral"
           label="Пригласи друга"
           description="5% другу на первый заказ, 100 ₽ вам после его покупки"
-          icon={<AppIcon icon={Users} size={20} />}
+          icon={<ActionIcon name="users" size={20} />}
           active={isActive("/profile/referral")}
           variant="menu"
           size="md"
@@ -105,7 +101,7 @@ export default function ProfilePage() {
         <FilledButton
           label="Написать в поддержку"
           description="Помощь с заказом, оплатой или доставкой"
-          icon={<AppIcon icon={MessageCircle} size={20} />}
+          icon={<ActionIcon name="message-circle" size={20} />}
           variant="menu"
           size="md"
           fullWidth
@@ -115,16 +111,8 @@ export default function ProfilePage() {
           href="/catalog"
           label="Каталог"
           description="Stars, Premium и подарки с мгновенной доставкой"
-          icon={<AppIcon icon={Star} size={20} />}
+          icon={<ActionIcon name="star" size={20} />}
           active={isActive("/catalog")}
-          variant="menu"
-          size="md"
-          fullWidth
-        />
-        <FilledButton
-          label="Промокод WELCOME10"
-          description="10% на первый заказ. Вводится на шаге оформления."
-          icon={<AppIcon icon={Gift} size={20} />}
           variant="menu"
           size="md"
           fullWidth
@@ -139,7 +127,7 @@ export default function ProfilePage() {
           href="/legal/privacy"
           label="Политика конфиденциальности"
           description="Какие данные собираем и как защищаем"
-          icon={<AppIcon icon={Shield} size={20} />}
+          icon={<ActionIcon name="shield-user" size={20} />}
           active={isActive("/legal/privacy")}
           variant="menu"
           size="md"
@@ -149,7 +137,7 @@ export default function ProfilePage() {
           href="/legal/terms"
           label="Пользовательское соглашение"
           description="Условия покупки и реферальной программы"
-          icon={<AppIcon icon={FileText} size={20} />}
+          icon={<ActionIcon name="file-text" size={20} />}
           active={isActive("/legal/terms")}
           variant="menu"
           size="md"

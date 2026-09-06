@@ -1,9 +1,6 @@
 "use client";
+import { Badge, ClickableCard, Text, VStack } from "@/components/ui";
 
-import { Badge } from "@astryxdesign/core/Badge";
-import { ClickableCard } from "@astryxdesign/core/ClickableCard";
-import { Text } from "@astryxdesign/core/Text";
-import { VStack } from "@astryxdesign/core/VStack";
 import { formatPrice } from "@/lib/utils";
 import { collectibleStarLabel, effectivePrice, productBadge } from "@/lib/product";
 import { AppIcon, productTypeIcon } from "@/components/icons";

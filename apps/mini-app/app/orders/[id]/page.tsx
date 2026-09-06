@@ -1,26 +1,23 @@
 "use client";
+import { Badge, Button, Card, Heading, Item, List, ListItem, Spinner, StatusDot, Text, VStack } from "@/components/ui";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
-import { Badge } from "@astryxdesign/core/Badge";
-import { Button } from "@astryxdesign/core/Button";
-import { Card } from "@astryxdesign/core/Card";
-import { Heading } from "@astryxdesign/core/Heading";
-import { Item } from "@astryxdesign/core/Item";
-import { List, ListItem } from "@astryxdesign/core/List";
-import { Spinner } from "@astryxdesign/core/Spinner";
-import { StatusDot } from "@astryxdesign/core/StatusDot";
-import { Text } from "@astryxdesign/core/Text";
-import { VStack } from "@astryxdesign/core/VStack";
+import { BackHeader } from "@/components/back-header";
 import { api } from "@/lib/api";
 import { formatDate, formatPrice } from "@/lib/utils";
+import { ActionIcon } from "@/components/action-icon";
 import { AppIcon, productTypeIcon } from "@/components/icons";
-import { Clock, Wallet } from "lucide-react";
+import { Clock } from "lucide-react";
+import { openTelegramInvoice } from "@/lib/telegram";
+import { notifyError, notifySuccess } from "@/stores/banners";
 
 const STATUS_LABELS: Record<string, string> = {
   CREATED: "Создан",
   PAYMENT_PENDING: "Ожидает оплаты",
   PAID: "Оплачен, готовим доставку",
+  DELIVERY_PENDING: "Оплачен, готовим доставку",
   DELIVERING: "Доставляем на аккаунт",
   COMPLETED: "Доставлен",
   CANCELLED: "Отменён",
@@ -28,18 +25,54 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function OrderDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const [paying, setPaying] = useState(false);
 
-  const { data: order, isError } = useQuery({
+  const { data: order, isError, refetch } = useQuery({
     queryKey: ["order", id],
     queryFn: () => api.getOrder(id),
     enabled: !!id,
     refetchInterval: 10_000,
   });
 
+  const payWithStars = async () => {
+    if (!order) return;
+    setPaying(true);
+    try {
+      const payment = await api.createPayment(order.id, "STARS");
+      if (!payment.payment_url) {
+        notifyError("Оплата недоступна", "Не удалось создать счёт Stars");
+        return;
+      }
+      const status = await openTelegramInvoice(payment.payment_url);
+      if (status === null) {
+        window.open(payment.payment_url, "_blank");
+        notifySuccess("Счёт открыт", "Завершите оплату в Telegram");
+        return;
+      }
+      if (status === "paid") {
+        notifySuccess("Оплата получена", "Готовим доставку подарка");
+        await refetch();
+        return;
+      }
+      if (status === "cancelled") {
+        notifyError("Оплата отменена", "Можно попробовать снова");
+        return;
+      }
+      notifyError("Оплата не прошла", "Попробуйте ещё раз");
+    } catch (e) {
+      notifyError("Ошибка оплаты", e instanceof Error ? e.message : "Не удалось оплатить");
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  const canPay = order?.status === "PAYMENT_PENDING" || order?.status === "CREATED";
+
   if (!order && !isError) return <Spinner label="Загрузка заказа" />;
   if (!order) {
     return (
       <VStack gap={4}>
+        <BackHeader fallbackHref="/orders" />
         <Heading level={1}>Заказ</Heading>
         <Text type="body" color="secondary" display="block">
           Не удалось открыть заказ. Возможно, нужна авторизация через Telegram.
@@ -51,6 +84,7 @@ export default function OrderDetailPage() {
 
   return (
     <VStack gap={5}>
+      <BackHeader fallbackHref="/orders" />
       <VStack gap={1}>
         <Heading level={1}>Заказ #{order.id.slice(0, 8)}</Heading>
         <Text type="supporting" color="secondary" display="block">
@@ -96,12 +130,22 @@ export default function OrderDetailPage() {
           description={formatDate(order.created_at)}
         />
         <ListItem
-          startContent={<AppIcon icon={Wallet} size={16} />}
+          startContent={<ActionIcon name="wallet" size={16} />}
           label="К оплате"
           description={order.discount_kopecks ? "Уже с учётом промокода" : "Без скидки"}
           endContent={<Text type="body" weight="medium">{formatPrice(order.total_kopecks)}</Text>}
         />
       </List>
+      {canPay ? (
+        <Button
+          label={paying ? "Открываем оплату…" : "Оплатить Stars"}
+          icon={<ActionIcon name="star" size={18} />}
+          variant="primary"
+          fullWidth
+          isDisabled={paying}
+          clickAction={payWithStars}
+        />
+      ) : null}
     </VStack>
   );
 }

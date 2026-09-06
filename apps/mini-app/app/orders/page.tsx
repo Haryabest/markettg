@@ -1,18 +1,14 @@
 "use client";
+import { Badge, EmptyState, Heading, List, ListItem, Spinner, Text, VStack, Button } from "@/components/ui";
 
 import { useQuery } from "@tanstack/react-query";
-import { Badge } from "@astryxdesign/core/Badge";
-import { EmptyState } from "@astryxdesign/core/EmptyState";
-import { Heading } from "@astryxdesign/core/Heading";
-import { List, ListItem } from "@astryxdesign/core/List";
-import { Spinner } from "@astryxdesign/core/Spinner";
-import { Text } from "@astryxdesign/core/Text";
-import { VStack } from "@astryxdesign/core/VStack";
-import { Button } from "@astryxdesign/core/Button";
+import { BackHeader } from "@/components/back-header";
 import { api } from "@/lib/api";
 import { formatDate, formatPrice } from "@/lib/utils";
+import { ActionIcon } from "@/components/action-icon";
 import { AppIcon } from "@/components/icons";
-import { Package, ShoppingBag } from "lucide-react";
+
+import { Package } from "lucide-react";
 
 const STATUS_LABELS: Record<string, string> = {
   CREATED: "Создан",
@@ -40,6 +36,7 @@ export default function OrdersPage() {
 
   return (
     <VStack gap={4}>
+      <BackHeader fallbackHref="/profile" />
       <VStack gap={1}>
         <Heading level={1}>Заказы</Heading>
         <Text type="supporting" color="secondary" display="block">
@@ -62,7 +59,7 @@ export default function OrdersPage() {
               label="В каталог"
               href="/catalog"
               variant="primary"
-              icon={<AppIcon icon={ShoppingBag} />}
+              icon={<ActionIcon name="layout-grid" size={20} />}
             />
           }
         />

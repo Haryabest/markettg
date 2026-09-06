@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import { api, type Cart, type User } from "@/lib/api";
 import { mapTelegramUser, parseUserFromInitData } from "@/lib/telegram";
+import { mergeUsers } from "@/lib/user-display";
 import { notifyError } from "@/stores/banners";
 
 const GUEST_CART_KEY = "markettg-cart-guest";
@@ -85,12 +86,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
     try {
       const res = await api.authTelegram(initData);
-      bindCartToUser(res.user.telegram_id);
-      set({ user: res.user, isReady: true });
+      let user = mergeUsers(res.user, telegramUser);
+      try {
+        user = mergeUsers(await api.getMe(), user);
+      } catch {
+        // auth response is enough
+      }
+      bindCartToUser(user.telegram_id);
+      set({ user, telegramUser: user, isReady: true });
     } catch {
       const parsed = parseUserFromInitData(initData);
       const fallback = telegramUser ?? (parsed ? mapTelegramUser(parsed) : null);
-      if (fallback) set({ telegramUser: fallback });
+      if (fallback?.telegram_id) set({ telegramUser: fallback });
       bindCartToUser(fallback?.telegram_id ?? null);
       set({ isReady: true });
     }

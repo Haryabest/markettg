@@ -19,21 +19,27 @@ type TelegramWebAppUser = {
 
 
 type TelegramWebApp = {
-
   initData?: string;
-
   initDataUnsafe?: {
-
     user?: TelegramWebAppUser;
-
   };
-
   ready?: () => void;
-
   expand?: () => void;
-
   colorScheme?: string;
-
+  themeParams?: {
+    bg_color?: string;
+    text_color?: string;
+    hint_color?: string;
+    link_color?: string;
+    button_color?: string;
+    button_text_color?: string;
+    secondary_bg_color?: string;
+    header_bg_color?: string;
+    section_bg_color?: string;
+    subtitle_text_color?: string;
+  };
+  setHeaderColor?: (color: `#${string}` | "bg_color" | "secondary_bg_color") => void;
+  setBackgroundColor?: (color: `#${string}` | "bg_color" | "secondary_bg_color") => void;
 };
 
 
@@ -238,6 +244,27 @@ export function isTelegramWebApp(): boolean {
 
   return Boolean(readTelegramInitData() || readTelegramUser());
 
+}
+
+
+export type InvoiceStatus = "paid" | "cancelled" | "failed" | "pending";
+
+
+/**
+ * Opens a Telegram invoice link inside the Mini App so the Stars charge stays
+ * in Telegram and the bot receives successful_payment. Resolves to null when
+ * running outside Telegram, where the caller should fall back to a new tab.
+ */
+export async function openTelegramInvoice(url: string): Promise<InvoiceStatus | null> {
+  try {
+    const { default: WebApp } = await import("@twa-dev/sdk");
+    if (typeof WebApp.openInvoice !== "function") return null;
+    return await new Promise<InvoiceStatus>((resolve) => {
+      WebApp.openInvoice(url, (status) => resolve(status as InvoiceStatus));
+    });
+  } catch {
+    return null;
+  }
 }
 
 

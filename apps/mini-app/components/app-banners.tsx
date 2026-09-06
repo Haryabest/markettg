@@ -1,8 +1,8 @@
 "use client";
+import { VStack } from "@/components/ui";
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { VStack } from "@astryxdesign/core/VStack";
 import { AppIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { useBannerStore, type AppBanner, type BannerStatus } from "@/stores/banners";
