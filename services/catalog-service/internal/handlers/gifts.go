@@ -11,7 +11,8 @@ import (
 
 func (h *GiftsHandler) SyncTelegramGifts(c *fiber.Ctx) error {
 	var req struct {
-		Gifts []repository.TelegramGiftSyncInput `json:"gifts"`
+		Gifts       []repository.TelegramGiftSyncInput `json:"gifts"`
+		MergeOnly   bool                               `json:"merge_only"`
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return fiber.ErrBadRequest
@@ -47,7 +48,7 @@ func (h *GiftsHandler) SyncTelegramGifts(c *fiber.Ctx) error {
 		}
 	}
 
-	result, err := h.repo.SyncTelegramGifts(ctx, req.Gifts, imageKeys, stickerKeys, h.starRate)
+	result, err := h.repo.SyncTelegramGifts(ctx, req.Gifts, imageKeys, stickerKeys, h.starRate, req.MergeOnly)
 	if err != nil {
 		return err
 	}

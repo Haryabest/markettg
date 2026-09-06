@@ -89,6 +89,7 @@ func (r *CatalogRepository) SyncTelegramGifts(
 	imageKeys map[string]string,
 	stickerKeys map[string]string,
 	starKopecksRate int64,
+	skipDisable bool,
 ) (*GiftSyncResult, error) {
 	if len(inputs) == 0 {
 		return &GiftSyncResult{}, nil
@@ -194,16 +195,18 @@ func (r *CatalogRepository) SyncTelegramGifts(
 		return nil, err
 	}
 
-	tag, err := tx.Exec(ctx, `
+	if !skipDisable {
+		tag, err := tx.Exec(ctx, `
 		UPDATE catalog.products
 		SET is_active = FALSE, updated_at = NOW()
 		WHERE product_type = 'GIFT'
 		  AND telegram_gift_id IS NOT NULL
 		  AND NOT (telegram_gift_id = ANY($1))`, activeIDs)
-	if err != nil {
-		return nil, err
+		if err != nil {
+			return nil, err
+		}
+		result.Disabled = int(tag.RowsAffected())
 	}
-	result.Disabled = int(tag.RowsAffected())
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err

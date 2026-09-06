@@ -22,5 +22,15 @@ class GatewayClient:
         data = resp.json()
         return data.get("orders", [])
 
+    async def notify_successful_payment(self, successful_payment: dict) -> dict:
+        """Forward Telegram's successful_payment to payment-service so the order
+        is marked PAID and delivery jobs are queued."""
+        resp = await self.client.post(
+            f"{self.base_url}/api/v1/payments/webhooks/telegram",
+            json={"message": {"successful_payment": successful_payment}},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     async def close(self):
         await self.client.aclose()

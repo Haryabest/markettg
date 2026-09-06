@@ -19,6 +19,19 @@ class Settings:
     telegram_api_id: int
     telegram_api_hash: str
     telegram_session: str
+    admin_telegram_ids: tuple[int, ...]
+
+
+def _parse_admin_ids(raw: str) -> tuple[int, ...]:
+    ids: list[int] = []
+    for part in raw.replace(" ", "").split(","):
+        if not part:
+            continue
+        try:
+            ids.append(int(part))
+        except ValueError:
+            continue
+    return tuple(ids)
 
 
 settings = Settings(
@@ -32,4 +45,5 @@ settings = Settings(
     telegram_api_id=int(os.getenv("TELEGRAM_API_ID", "0") or "0"),
     telegram_api_hash=os.getenv("TELEGRAM_API_HASH", ""),
     telegram_session=os.getenv("TELEGRAM_SESSION", ""),
+    admin_telegram_ids=_parse_admin_ids(os.getenv("ADMIN_TELEGRAM_IDS", "")),
 )

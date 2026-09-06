@@ -1,22 +1,27 @@
+from urllib.parse import quote
+
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.config import settings
 
 
-def _app(path: str = "") -> str:
+def _app(path: str = "", start_param: str = "") -> str:
     base = settings.mini_app_url.rstrip("/")
-    if not path:
-        return base
-    return f"{base}/{path.lstrip('/')}"
+    if path:
+        base = f"{base}/{path.lstrip('/')}"
+    if start_param:
+        sep = "&" if "?" in base else "?"
+        base = f"{base}{sep}tgWebAppStartParam={quote(start_param, safe='')}"
+    return base
 
 
-def main_menu_keyboard() -> InlineKeyboardMarkup:
+def main_menu_keyboard(start_param: str = "") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
             text="🛍 Открыть магазин",
-            web_app=WebAppInfo(url=_app()),
+            web_app=WebAppInfo(url=_app(start_param=start_param)),
         )
     )
     builder.row(

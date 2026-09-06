@@ -7,11 +7,11 @@ class CatalogClient:
         self.internal_secret = internal_secret
         self.client = httpx.AsyncClient(timeout=120.0)
 
-    async def sync_telegram_gifts(self, gifts: list[dict]) -> dict:
+    async def sync_telegram_gifts(self, gifts: list[dict], *, merge_only: bool = False) -> dict:
         resp = await self.client.post(
             f"{self.base_url}/api/v1/internal/gifts/sync",
             headers={"X-Internal-Secret": self.internal_secret},
-            json={"gifts": gifts},
+            json={"gifts": gifts, "merge_only": merge_only},
         )
         resp.raise_for_status()
         return resp.json()

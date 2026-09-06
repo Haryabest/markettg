@@ -203,6 +203,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+    ports:
+      - "8082:8082"
 
   order-service:
     <<: *go-service
@@ -235,6 +237,8 @@ services:
       PORT: "8084"
       ORDER_SERVICE_URL: http://order-service:8083
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      STAR_KOPECKS_RATE: ${STAR_KOPECKS_RATE:-180}
+      STARS_MARKUP_PERCENT: ${STARS_MARKUP_PERCENT:-0}
       SBP_MOCK_MODE: ${SBP_MOCK_MODE:-true}
       SBP_WEBHOOK_SECRET: ${SBP_WEBHOOK_SECRET:-dev-sbp-secret}
     healthcheck:
@@ -254,6 +258,8 @@ services:
       <<: *common-env
       PORT: "8085"
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      GIFT_PAY_FOR_UPGRADE: ${GIFT_PAY_FOR_UPGRADE:-false}
+      GIFT_NOTIFY_USER: ${GIFT_NOTIFY_USER:-true}
       FRAGMENT_API_URL: ${FRAGMENT_API_URL:-}
       FRAGMENT_API_TOKEN: ${FRAGMENT_API_TOKEN:-}
     healthcheck:
@@ -301,6 +307,7 @@ services:
       TELEGRAM_API_ID: ${TELEGRAM_API_ID:-0}
       TELEGRAM_API_HASH: ${TELEGRAM_API_HASH:-}
       TELEGRAM_SESSION: ${TELEGRAM_SESSION:-}
+      ADMIN_TELEGRAM_IDS: ${ADMIN_TELEGRAM_IDS:-}
     ports:
       - "8090:8090"
     networks:
@@ -311,14 +318,14 @@ services:
       context: ./apps/mini-app
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
+        NEXT_PUBLIC_API_URL: ""
     restart: unless-stopped
     depends_on:
       gateway:
         condition: service_healthy
     environment:
       API_URL: http://gateway:8080
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
+      NEXT_PUBLIC_API_URL: ""
       NEXT_PUBLIC_SUPPORT_URL: ${NEXT_PUBLIC_SUPPORT_URL:-https://t.me/markettg_support}
     ports:
       - "3000:3000"

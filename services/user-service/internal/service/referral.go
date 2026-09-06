@@ -60,6 +60,11 @@ func (s *Service) authTelegramWithReferral(ctx context.Context, initData string)
 
 	if !existed {
 		s.attachReferral(ctx, user.ID, data.StartParam)
+	} else if data.StartParam != "" {
+		ref, _ := s.repo.GetReferralByReferredID(ctx, user.ID)
+		if ref == nil {
+			s.attachReferral(ctx, user.ID, data.StartParam)
+		}
 	}
 
 	return &AuthResponse{User: user}, nil

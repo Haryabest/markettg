@@ -5,7 +5,7 @@ from io import BytesIO
 
 from aiogram import Bot
 from telethon import TelegramClient
-from telethon.sessions import MemorySession
+from telethon.sessions import MemorySession, StringSession
 from telethon.tl.functions.payments import GetStarGiftsRequest
 
 from bot.catalog_client import CatalogClient
@@ -104,6 +104,12 @@ def _star_count(gift) -> int:
     return 0
 
 
+def _include_gift(star_gift) -> bool:
+    if getattr(star_gift, "sold_out", False) or getattr(star_gift, "limited", False):
+        return True
+    return _star_count(star_gift) > 0
+
+
 def _gift_entry(star_gift, *, image_base64=None, sticker_base64=None) -> dict:
     gift_id = str(star_gift.id)
     title = _gift_title(star_gift)
@@ -129,68 +135,67 @@ async def _catalog_payload(client: TelegramClient) -> tuple[dict[str, dict], dic
     gifts_by_id: dict[str, object] = {str(g.id): g for g in catalog_result.gifts}
     payload: dict[str, dict] = {}
     for gift_id, star_gift in gifts_by_id.items():
-        stars = _star_count(star_gift)
-        if stars <= 0:
+        if not _include_gift(star_gift):
             continue
-        payload[gift_id] = _gift_entry(star_gift)
+        entry = _gift_entry(star_gift)
+        if entry["star_count"] <= 0:
+            entry["star_count"] = 1
+        payload[gift_id] = entry
     return payload, gifts_by_id
 
 
 async def _enrich_images(
     client: TelegramClient,
-    catalog: CatalogClient,
     gifts_by_id: dict[str, object],
     gift_ids: list[str],
-) -> None:
+) -> dict[str, dict]:
     sem = asyncio.Semaphore(IMAGE_CONCURRENCY)
+    enriched: dict[str, dict] = {}
 
-    async def process_one(gift_id: str) -> dict | None:
+    async def process_one(gift_id: str) -> tuple[str, dict | None]:
         star_gift = gifts_by_id.get(gift_id)
         if not star_gift:
-            return None
+            return gift_id, None
         async with sem:
             preview = await _preview_base64_telethon(client, star_gift)
             sticker = await _sticker_base64_telethon(client, star_gift)
         if not preview and not sticker:
-            return None
-        entry = _gift_entry(star_gift, image_base64=preview, sticker_base64=sticker)
-        return entry
+            return gift_id, None
+        return gift_id, _gift_entry(star_gift, image_base64=preview, sticker_base64=sticker)
 
     for start in range(0, len(gift_ids), IMAGE_BATCH_SIZE):
         batch_ids = gift_ids[start : start + IMAGE_BATCH_SIZE]
         entries = await asyncio.gather(*(process_one(gid) for gid in batch_ids))
-        chunk = [entry for entry in entries if entry]
-        if not chunk:
-            continue
-        await catalog.sync_telegram_gifts(chunk)
-        logger.info("gift images synced batch %s-%s", start + 1, start + len(chunk))
+        for gift_id, entry in entries:
+            if entry:
+                enriched[gift_id] = entry
+        logger.info("gift images prepared batch %s-%s", start + 1, start + len(batch_ids))
+
+    return enriched
 
 
 async def sync_telegram_gifts(bot: Bot, catalog: CatalogClient) -> dict | None:
     payload_by_id: dict[str, dict] = {}
     gifts_by_id: dict[str, object] = {}
 
-    if settings.telegram_api_id and settings.telegram_api_hash and settings.bot_token:
-        client = TelegramClient(
-            MemorySession(),
-            settings.telegram_api_id,
-            settings.telegram_api_hash,
-        )
-        await client.start(bot_token=settings.bot_token)
+    if settings.telegram_api_id and settings.telegram_api_hash and (settings.telegram_session or settings.bot_token):
+        session = StringSession(settings.telegram_session) if settings.telegram_session else MemorySession()
+        client = TelegramClient(session, settings.telegram_api_id, settings.telegram_api_hash)
         try:
+            if settings.telegram_session:
+                await client.start()
+            else:
+                await client.start(bot_token=settings.bot_token)
             payload_by_id, gifts_by_id = await _catalog_payload(client)
             logger.info("star gifts catalog fetched: %s items", len(payload_by_id))
+            if payload_by_id:
+                enriched = await _enrich_images(client, gifts_by_id, list(payload_by_id.keys()))
+                for gift_id, entry in enriched.items():
+                    payload_by_id[gift_id] = {**payload_by_id.get(gift_id, {}), **entry}
         except Exception as exc:
             logger.warning("GetStarGifts failed: %s", exc)
-            await client.disconnect()
-            client = None
-
-        if payload_by_id and client is not None:
-            try:
-                await _enrich_images(client, catalog, gifts_by_id, list(payload_by_id.keys()))
-            except Exception as exc:
-                logger.warning("gift image enrichment failed: %s", exc)
-            finally:
+        finally:
+            if client.is_connected():
                 await client.disconnect()
 
     try:

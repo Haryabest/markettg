@@ -111,7 +111,7 @@ func (s *GiftSyncer) syncOnce(ctx context.Context) {
 	}
 
 	rate := int64(config.GetEnvInt("STAR_KOPECKS_RATE", 180))
-	result, err := s.repo.SyncTelegramGifts(ctx, inputs, imageKeys, map[string]string{}, rate)
+	result, err := s.repo.SyncTelegramGifts(ctx, inputs, imageKeys, map[string]string{}, rate, false)
 	if err != nil {
 		s.log.Warn("telegram gifts sync failed", zap.Error(err))
 		return

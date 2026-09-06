@@ -1,6 +1,7 @@
 package order
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -59,7 +60,7 @@ func (c *Client) UpdateStatus(ctx context.Context, orderID uuid.UUID, status str
 	body, _ := json.Marshal(map[string]string{"status": status})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPatch,
 		fmt.Sprintf("%s/api/v1/internal/orders/%s/status", c.baseURL, orderID),
-		newBytesReader(body))
+		bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -73,20 +74,4 @@ func (c *Client) UpdateStatus(ctx context.Context, orderID uuid.UUID, status str
 		return fmt.Errorf("failed to update order status")
 	}
 	return nil
-}
-
-type bytesReader struct {
-	data []byte
-	pos  int
-}
-
-func newBytesReader(data []byte) *bytesReader { return &bytesReader{data: data} }
-
-func (r *bytesReader) Read(p []byte) (int, error) {
-	if r.pos >= len(r.data) {
-		return 0, fmt.Errorf("EOF")
-	}
-	n := copy(p, r.data[r.pos:])
-	r.pos += n
-	return n, nil
 }

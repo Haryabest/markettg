@@ -1,21 +1,25 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/markettg/markettg/packages/go-shared/pkg/config"
 )
 
 type DeliveryConfig struct {
-	Type string `json:"type"`
-	Amount int `json:"amount"`
-	DurationDays int `json:"duration_days"`
-	GiftID string `json:"gift_id"`
+	Type         string `json:"type"`
+	Amount       int    `json:"amount"`
+	DurationDays int    `json:"duration_days"`
+	GiftID       string `json:"gift_id"`
+	StarCount    int    `json:"star_count"`
+	NFTSlug      string `json:"nft_slug"`
 }
 
 type DeliveryHandler interface {
@@ -23,7 +27,45 @@ type DeliveryHandler interface {
 	Deliver(ctx context.Context, telegramID int64, cfg DeliveryConfig) (json.RawMessage, error)
 }
 
-// StarsDeliveryHandler uses Telegram Bot API
+// callBotAPI performs a Bot API call and unwraps Telegram's {ok, result, description}
+// envelope so failures surface as readable errors in the delivery job log.
+func callBotAPI(ctx context.Context, client *http.Client, botToken, method string, payload map[string]interface{}) (json.RawMessage, error) {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/%s", botToken, method)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	var envelope struct {
+		OK          bool            `json:"ok"`
+		Result      json.RawMessage `json:"result"`
+		ErrorCode   int             `json:"error_code"`
+		Description string          `json:"description"`
+	}
+	if err := json.Unmarshal(respBody, &envelope); err != nil {
+		return nil, fmt.Errorf("%s: unexpected response %s", method, string(respBody))
+	}
+	if !envelope.OK {
+		return nil, fmt.Errorf("%s failed (%d): %s", method, envelope.ErrorCode, envelope.Description)
+	}
+	return respBody, nil
+}
+
+// StarsDeliveryHandler covers "buy N Stars" products. The Bot API has no
+// star-transfer method, so the job is parked for manual fulfilment by an admin.
 type StarsDeliveryHandler struct {
 	botToken string
 	client   *http.Client
@@ -39,36 +81,20 @@ func NewStarsDeliveryHandler() *StarsDeliveryHandler {
 func (h *StarsDeliveryHandler) Type() string { return "STARS" }
 
 func (h *StarsDeliveryHandler) Deliver(ctx context.Context, telegramID int64, cfg DeliveryConfig) (json.RawMessage, error) {
-	// Telegram Bot API: transfer stars to user
-	payload := map[string]interface{}{
-		"user_id": telegramID,
-		"star_count": cfg.Amount,
-		"text": fmt.Sprintf("Ваш заказ: %d Stars", cfg.Amount),
+	if h.botToken != "" && telegramID != 0 {
+		_, _ = callBotAPI(ctx, h.client, h.botToken, "sendMessage", map[string]interface{}{
+			"chat_id": telegramID,
+			"text":    fmt.Sprintf("Заказ на %d Stars оплачен. Начисление выполнит оператор — мы напишем, как только всё будет готово.", cfg.Amount),
+		})
 	}
-	body, _ := json.Marshal(payload)
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", h.botToken)
-	req, err := http.NewRequestWithContext(ctx, "POST", url, jsonReader(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := h.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("telegram API error: %s", string(respBody))
-	}
-	return respBody, nil
+	return nil, fmt.Errorf("stars top-up requires manual fulfilment: Bot API cannot transfer Stars")
 }
 
 // PremiumDeliveryHandler uses Fragment API
 type PremiumDeliveryHandler struct {
-	apiURL    string
-	apiToken  string
-	client    *http.Client
+	apiURL   string
+	apiToken string
+	client   *http.Client
 }
 
 func NewPremiumDeliveryHandler() *PremiumDeliveryHandler {
@@ -83,14 +109,14 @@ func (h *PremiumDeliveryHandler) Type() string { return "PREMIUM" }
 
 func (h *PremiumDeliveryHandler) Deliver(ctx context.Context, telegramID int64, cfg DeliveryConfig) (json.RawMessage, error) {
 	if h.apiToken == "" {
-		return json.RawMessage(`{"status":"simulated","message":"FRAGMENT_API_TOKEN not set"}`), nil
+		return nil, fmt.Errorf("premium requires manual fulfilment: FRAGMENT_API_TOKEN not set")
 	}
 	payload := map[string]interface{}{
 		"recipient_id": telegramID,
 		"months":       cfg.DurationDays / 30,
 	}
 	body, _ := json.Marshal(payload)
-	req, err := http.NewRequestWithContext(ctx, "POST", h.apiURL+"/premium/gift", jsonReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.apiURL+"/premium/gift", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -108,66 +134,86 @@ func (h *PremiumDeliveryHandler) Deliver(ctx context.Context, telegramID int64, 
 	return respBody, nil
 }
 
-// GiftDeliveryHandler sends official Telegram Star Gifts via Bot API.
+// GiftDeliveryHandler sends official Telegram Star Gifts via Bot API sendGift,
+// paying from the bot's own Stars balance.
 type GiftDeliveryHandler struct {
-	botToken string
-	client   *http.Client
+	botToken      string
+	payForUpgrade bool
+	notify        bool
+	client        *http.Client
 }
 
 func NewGiftDeliveryHandler() *GiftDeliveryHandler {
 	return &GiftDeliveryHandler{
-		botToken: config.GetEnv("TELEGRAM_BOT_TOKEN", ""),
-		client:   &http.Client{Timeout: 60 * time.Second},
+		botToken:      config.GetEnv("TELEGRAM_BOT_TOKEN", ""),
+		payForUpgrade: config.GetEnv("GIFT_PAY_FOR_UPGRADE", "false") == "true",
+		notify:        config.GetEnv("GIFT_NOTIFY_USER", "true") != "false",
+		client:        &http.Client{Timeout: 60 * time.Second},
 	}
 }
 
 func (h *GiftDeliveryHandler) Type() string { return "GIFT" }
 
 func (h *GiftDeliveryHandler) Deliver(ctx context.Context, telegramID int64, cfg DeliveryConfig) (json.RawMessage, error) {
-	giftID := cfg.GiftID
-	if giftID == "" {
+	if cfg.Type == "NFT" || cfg.NFTSlug != "" {
+		return nil, fmt.Errorf("NFT gift %q requires manual transfer: Bot API cannot send collectible gifts", cfg.NFTSlug)
+	}
+	if cfg.GiftID == "" {
 		return nil, fmt.Errorf("gift_id is required")
 	}
+	if telegramID == 0 {
+		return nil, fmt.Errorf("recipient telegram id is unknown")
+	}
 	if h.botToken == "" {
-		return json.RawMessage(fmt.Sprintf(`{"status":"simulated","gift_id":"%s"}`, giftID)), nil
+		return nil, fmt.Errorf("TELEGRAM_BOT_TOKEN is not set")
 	}
 
 	payload := map[string]interface{}{
 		"user_id": telegramID,
-		"gift_id": giftID,
+		"gift_id": cfg.GiftID,
 	}
-	body, _ := json.Marshal(payload)
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendGift", h.botToken)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, jsonReader(body))
+	if h.payForUpgrade {
+		payload["pay_for_upgrade"] = true
+	}
+
+	resp, err := callBotAPI(ctx, h.client, h.botToken, "sendGift", payload)
 	if err != nil {
-		return nil, err
+		return nil, h.explain(ctx, err)
 	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := h.client.Do(req)
-	if err != nil {
-		return nil, err
+
+	if h.notify {
+		_, _ = callBotAPI(ctx, h.client, h.botToken, "sendMessage", map[string]interface{}{
+			"chat_id": telegramID,
+			"text":    "🎁 Подарок отправлен! Проверьте профиль Telegram.",
+		})
 	}
-	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("telegram sendGift error: %s", string(respBody))
-	}
-	return respBody, nil
+	return resp, nil
 }
 
-type jsonReaderType struct {
-	data []byte
-	pos  int
+// explain enriches a sendGift failure with the bot's current Stars balance,
+// which is the usual reason a delivery cannot go through.
+func (h *GiftDeliveryHandler) explain(ctx context.Context, cause error) error {
+	balance, balErr := h.StarBalance(ctx)
+	if balErr != nil {
+		return cause
+	}
+	return fmt.Errorf("%w (bot Stars balance: %d)", cause, balance)
 }
 
-func jsonReader(data []byte) *jsonReaderType { return &jsonReaderType{data: data} }
-func (r *jsonReaderType) Read(p []byte) (int, error) {
-	if r.pos >= len(r.data) {
-		return 0, fmt.Errorf("EOF")
+func (h *GiftDeliveryHandler) StarBalance(ctx context.Context) (int64, error) {
+	resp, err := callBotAPI(ctx, h.client, h.botToken, "getMyStarBalance", map[string]interface{}{})
+	if err != nil {
+		return 0, err
 	}
-	n := copy(p, r.data[r.pos:])
-	r.pos += n
-	return n, nil
+	var parsed struct {
+		Result struct {
+			Amount json.Number `json:"amount"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(resp, &parsed); err != nil {
+		return 0, err
+	}
+	return strconv.ParseInt(parsed.Result.Amount.String(), 10, 64)
 }
 
 func GetHandler(handlerType string, handlers map[string]DeliveryHandler) DeliveryHandler {

@@ -3,11 +3,12 @@
 import asyncio
 import logging
 
+import httpx
 from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandStart
-from aiogram.types import BotCommand, MenuButtonWebApp, Message, WebAppInfo
+from aiogram.types import BotCommand, MenuButtonWebApp, Message, PreCheckoutQuery, WebAppInfo
 from aiohttp import web
 
 from bot.api import GatewayClient
@@ -29,6 +30,18 @@ bot = Bot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=Pars
 dp = Dispatcher()
 gateway = GatewayClient(settings.gateway_url, settings.bot_secret)
 catalog = CatalogClient(settings.catalog_url, settings.bot_secret)
+
+async def get_star_balance() -> int:
+    """getMyStarBalance is newer than the pinned aiogram, so call it directly."""
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.post(
+            f"https://api.telegram.org/bot{settings.bot_token}/getMyStarBalance"
+        )
+    data = resp.json()
+    if not data.get("ok"):
+        raise RuntimeError(data.get("description", "unknown error"))
+    return int(data["result"]["amount"])
+
 
 WELCOME_TEXT = (
     "👋 <b>Добро пожаловать в MarketTG!</b>\n\n"
@@ -75,10 +88,14 @@ LEGAL_TEXT = (
 @dp.message(CommandStart())
 async def cmd_start(message: Message):
     text = WELCOME_TEXT
+    ref_param = ""
     start_param = (message.text or "").split(maxsplit=1)
-    if len(start_param) > 1 and start_param[1].strip().startswith("ref_"):
-        text += REFERRAL_SUFFIX
-    await message.answer(text, reply_markup=main_menu_keyboard())
+    if len(start_param) > 1:
+        param = start_param[1].strip()
+        if param.startswith("ref_"):
+            ref_param = param
+            text += REFERRAL_SUFFIX
+    await message.answer(text, reply_markup=main_menu_keyboard(ref_param))
 
 
 @dp.message(Command("catalog"))
@@ -145,6 +162,67 @@ async def cmd_legal(message: Message):
 @dp.message(Command("help"))
 async def cmd_help(message: Message):
     await message.answer(HELP_TEXT, reply_markup=main_menu_keyboard())
+
+
+@dp.pre_checkout_query()
+async def process_pre_checkout(query: PreCheckoutQuery):
+    """Telegram gives us 10 seconds to approve the charge, so answer first and
+    let payment-service reconcile afterwards from successful_payment."""
+    try:
+        await query.answer(ok=True)
+    except Exception as exc:
+        logger.error("pre_checkout answer failed: %s", exc)
+
+
+@dp.message(F.successful_payment)
+async def process_successful_payment(message: Message):
+    payment = message.successful_payment
+    logger.info(
+        "successful payment: payload=%s charge=%s amount=%s %s",
+        payment.invoice_payload,
+        payment.telegram_payment_charge_id,
+        payment.total_amount,
+        payment.currency,
+    )
+
+    try:
+        await gateway.notify_successful_payment(
+            {
+                "currency": payment.currency,
+                "total_amount": payment.total_amount,
+                "invoice_payload": payment.invoice_payload,
+                "telegram_payment_charge_id": payment.telegram_payment_charge_id,
+                "provider_payment_charge_id": payment.provider_payment_charge_id,
+                "telegram_id": message.from_user.id,
+            }
+        )
+    except Exception as exc:
+        logger.error("payment webhook failed: %s", exc)
+        await message.answer(
+            "Оплата получена, но подтверждение зависло. Мы уже разбираемся — "
+            "напишите в /support, если подарок не придёт в течение 10 минут."
+        )
+        return
+
+    await message.answer(
+        "✅ Оплата получена! Готовим доставку — подарок придёт в этот чат в течение минуты."
+    )
+
+
+@dp.message(Command("balance"))
+async def cmd_balance(message: Message):
+    if settings.admin_telegram_ids and message.from_user.id not in settings.admin_telegram_ids:
+        return
+    try:
+        amount = await get_star_balance()
+    except Exception as exc:
+        logger.error("star balance failed: %s", exc)
+        await message.answer(f"Не удалось получить баланс Stars: {exc}")
+        return
+    await message.answer(
+        f"⭐ Баланс бота: <b>{amount}</b> Stars\n\n"
+        "Подарки отправляются с этого баланса — держите запас выше суммы активных заказов."
+    )
 
 
 @dp.message(F.text)

@@ -127,11 +127,16 @@ func (s *Service) HandleWebhook(ctx context.Context, method string, headers map[
 		return nil
 	}
 
-	// Find payment by provider ID or payload
-	paymentID, err := uuid.Parse(event.ProviderPaymentID)
-	if err != nil {
-		// try invoice payload format mock-sbp-{uuid} or direct uuid
-		paymentID, _ = uuid.Parse(event.ProviderPaymentID[5:])
+	paymentID := event.PaymentID
+	if paymentID == uuid.Nil {
+		paymentID, err = uuid.Parse(event.ProviderPaymentID)
+		if err != nil && len(event.ProviderPaymentID) > 5 {
+			// mock-sbp-{uuid} style identifiers
+			paymentID, err = uuid.Parse(event.ProviderPaymentID[5:])
+		}
+		if err != nil {
+			return apperrors.ErrBadRequest
+		}
 	}
 
 	return s.markOrderPaid(ctx, paymentID, event)

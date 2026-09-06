@@ -27,7 +27,9 @@ if (-not $env:TELEGRAM_BOT_TOKEN) {
 if ($StopDockerBot) {
   Push-Location $root
   try {
-    docker compose stop bot 2>$null | Out-Null
+    docker compose stop bot 2>&1 | Out-Null
+  } catch {
+    # Bot container may already be stopped.
   } finally {
     Pop-Location
   }
